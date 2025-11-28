@@ -29,7 +29,7 @@ def load_trivia_qa(split: str = "validation", num_samples: int | None = None) ->
         dataset = dataset.select(range(min(len(dataset), num_samples)))
     return dataset
 
-def load_trivia_qa_rl_dataset(split: str = "validation", num_samples: int | None = None, num_proc: int | None = None) -> Dataset:
+def load_trivia_qa_rl(split: str = "validation", num_samples: int | None = None, num_proc: int | None = None) -> Dataset:
     if num_proc is None:
         num_proc = os.cpu_count() or 1
     dataset = load_trivia_qa(split, num_samples)
