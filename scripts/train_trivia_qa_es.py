@@ -39,6 +39,7 @@ parser.add_argument(
     help="Number of data per iteration",
 )
 parser.add_argument("--num-samples", type=int, help="Number of samples to load")
+parser.add_argument("--num-val-samples", type=int, help="Number of samples to load for validation")
 parser.add_argument("--num-workers", type=int, default=os.cpu_count() // 2, help="Number of workers")
 parser.add_argument("--seed", type=int, default=42, help="Random seed")
 parser.add_argument("--output-dir", type=str, help="Output directory")
@@ -159,7 +160,7 @@ def main(args):
 
     logger.info("[+] Loading TriviaQA dataset...")
     train_data = load_trivia_qa_rl(split="train", num_samples=args.num_samples)
-    val_data = load_trivia_qa_rl(split="validation")
+    val_data = load_trivia_qa_rl(split="validation", num_samples=args.num_val_samples)
     logger.info(f"[+] Total samples: {len(train_data)}")
 
     logger.info(f"[+] Loading tokenizer {args.model}...")
