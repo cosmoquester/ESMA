@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from meta.data import load_trivia_qa_rl
-from meta.dataset import RLDataset, simple_collate_fn
+from meta.dataset import RLDataset, pad_collate_fn, simple_collate_fn
 from meta.evolution import apply_evolution
 from meta.utils import get_logger, seed_everything
 
@@ -47,7 +47,6 @@ parser.add_argument("--evaluate-interval", type=int, default=50, help="Evaluate 
 parser.add_argument("--wandb-run-name", type=str, help="Wandb run name")
 parser.add_argument("--wandb-project", type=str, default="meta-cognition", help="Wandb project")
 parser.add_argument("--wandb-entity", type=str, default="cosmoquester", help="Wandb entity")
-args = parser.parse_args()
 
 
 def simple_reward(output: str, answers: list[str]) -> float:
@@ -55,6 +54,30 @@ def simple_reward(output: str, answers: list[str]) -> float:
         if answer in output:
             return 1
     return 0
+
+
+def evaluate_model(
+    model: AutoModelForCausalLM,
+    tokenizer: AutoTokenizer,
+    val_loader: DataLoader,
+    max_new_tokens: int,
+) -> float:
+    rewards = []
+    for batch in val_loader:
+        input_ids = batch["input_ids"].to(model.device)
+        attention_mask = batch["attention_mask"].to(model.device)
+        outputs = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=max_new_tokens,
+        )
+
+        generated_tokens = outputs[:, input_ids.shape[1] :]
+        decoded_outputs = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+        batch_answers = batch["answers"]
+        for decoded_output, answers in zip(decoded_outputs, batch_answers):
+            rewards.append(simple_reward(decoded_output, answers))
+    return torch.tensor(rewards, dtype=torch.float32, device=model.device)
 
 
 def single_iteration(
@@ -65,6 +88,7 @@ def single_iteration(
     local_seeds: np.ndarray,
     sigma: float,
     batch_size: int,
+    max_new_tokens: int,
 ) -> list[float]:
     rewards = []
     for seed in local_seeds:
@@ -86,7 +110,7 @@ def single_iteration(
             outputs = model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                max_new_tokens=args.max_new_tokens,
+                max_new_tokens=max_new_tokens,
             )
             generated_tokens = outputs[:, input_ids.shape[1] :]
             decoded_outputs = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
@@ -122,7 +146,11 @@ def main(args):
         import wandb
 
         wandb.login()
-        run = wandb.init(project=args.wandb_project, entity=args.wandb_entity, name=args.wandb_run_name)
+        run = wandb.init(
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            name=args.wandb_run_name,
+        )
     else:
         run = None
 
@@ -130,23 +158,34 @@ def main(args):
     logger.info(f"[+] Using seed: {args.seed}")
 
     logger.info("[+] Loading TriviaQA dataset...")
-    dataset = load_trivia_qa_rl(split="train", num_samples=args.num_samples)
-    logger.info(f"[+] Total samples: {len(dataset)}")
+    train_data = load_trivia_qa_rl(split="train", num_samples=args.num_samples)
+    val_data = load_trivia_qa_rl(split="validation")
+    logger.info(f"[+] Total samples: {len(train_data)}")
 
     logger.info(f"[+] Loading tokenizer {args.model}...")
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    logger.info(f"[+] Tokenized dataset: {len(dataset)}")
+    logger.info(f"[+] Tokenized dataset: {len(train_data)}")
 
-    dataset = RLDataset(dataset, tokenizer, max_length=args.max_input_length)
-    data_loader = DataLoader(
-        dataset,
+    train_dataset = RLDataset(train_data, tokenizer, max_length=args.max_input_length)
+    val_dataset = RLDataset(val_data, tokenizer, max_length=args.max_input_length)
+    train_loader = DataLoader(
+        train_dataset,
         batch_size=args.num_data_per_iteration,
         shuffle=True,
         num_workers=args.num_workers,
         pin_memory=True,
         collate_fn=simple_collate_fn,
     )
-    infinite_loader = itertools.chain.from_iterable(itertools.repeat(data_loader))
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        collate_fn=pad_collate_fn,
+    )
+    infinite_loader = itertools.chain.from_iterable(itertools.repeat(train_loader))
+    val_loader = accelerator.prepare(val_loader)
 
     logger.info(f"[+] Loading model {args.model}...")
     model = AutoModelForCausalLM.from_pretrained(args.model)
@@ -170,6 +209,7 @@ def main(args):
             local_seeds,
             args.sigma,
             args.batch_size,
+            args.max_new_tokens,
         )
 
         local_seeds_tensor = torch.tensor(local_seeds, dtype=torch.long, device=accelerator.device)
@@ -187,6 +227,14 @@ def main(args):
                 tokenizer.save_pretrained(os.path.join(checkpoint_dir, f"iteration_{iteration:03d}"))
                 logger.info(f"[+] Model saved to {os.path.join(checkpoint_dir, f'iteration_{iteration:03d}')}")
 
+        if iteration % args.evaluate_interval == 0:
+            val_rewards = evaluate_model(model, tokenizer, val_loader, args.max_new_tokens)
+            all_val_rewards = accelerator.gather(val_rewards)
+            avg_val_reward = all_val_rewards.mean().item()
+            logger.info(f"[+] Iteration {iteration + 1:03d} Val Rewards: {avg_val_reward:.4f}")
+            if run is not None and accelerator.is_main_process:
+                run.log({"val_rewards": avg_val_reward})
+
         normalized_rewards = (all_rewards - all_rewards.mean()) / (all_rewards.std() + 1e-8)
 
         apply_evolution(
@@ -198,4 +246,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(args)
+    main(parser.parse_args())

@@ -1,3 +1,4 @@
+from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer
 
@@ -46,6 +47,7 @@ class RLDataset(Dataset):
         )
         answers = self.dataset[idx]["answers"]
         return {
+            "question_id": self.dataset[idx]["question_id"],
             "input_ids": input_tokens["input_ids"].squeeze(0),
             "attention_mask": input_tokens["attention_mask"].squeeze(0),
             "answers": answers,
@@ -54,7 +56,19 @@ class RLDataset(Dataset):
 
 def simple_collate_fn(batch: list[dict]) -> list[dict]:
     return {
+        "question_id": [item["question_id"] for item in batch],
         "input_ids": [item["input_ids"] for item in batch],
         "attention_mask": [item["attention_mask"] for item in batch],
+        "answers": [item["answers"] for item in batch],
+    }
+
+
+def pad_collate_fn(batch: list[dict]) -> dict:
+    return {
+        "question_id": [item["question_id"] for item in batch],
+        "input_ids": pad_sequence([item["input_ids"] for item in batch], batch_first=True, padding_side="left"),
+        "attention_mask": pad_sequence(
+            [item["attention_mask"] for item in batch], batch_first=True, padding_side="left"
+        ),
         "answers": [item["answers"] for item in batch],
     }
