@@ -76,9 +76,25 @@ def evaluate_model(
 
         generated_tokens = outputs[:, input_ids.shape[1] :]
         decoded_outputs = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+
         batch_answers = batch["answers"]
+        correctness = []
         for decoded_output, answers in zip(decoded_outputs, batch_answers):
-            rewards.append(simple_reward(decoded_output, answers))
+            correctness.append(simple_reward(decoded_output, answers))
+
+        meta_input_ids = batch["meta_input_ids"].to(model.device)
+        meta_attention_mask = batch["meta_attention_mask"].to(model.device)
+        meta_outputs = model.generate(
+            input_ids=meta_input_ids,
+            attention_mask=meta_attention_mask,
+            max_new_tokens=max_new_tokens,
+        )
+        meta_generated_tokens = meta_outputs[:, meta_input_ids.shape[1] :]
+        meta_decoded_outputs = tokenizer.batch_decode(meta_generated_tokens, skip_special_tokens=True)
+        meta_yes = ["yes" in decoded_output.lower() for decoded_output in meta_decoded_outputs]
+
+        rewards.extend(int(correct == yes) for correct, yes in zip(correctness, meta_yes))
+
     return torch.tensor(rewards, dtype=torch.float32, device=model.device)
 
 
@@ -167,8 +183,18 @@ def main(args):
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     logger.info(f"[+] Tokenized dataset: {len(train_data)}")
 
-    train_dataset = RLDataset(train_data, tokenizer, max_length=args.max_input_length)
-    val_dataset = RLDataset(val_data, tokenizer, max_length=args.max_input_length)
+    train_dataset = RLDataset(
+        train_data,
+        tokenizer,
+        max_length=args.max_input_length,
+        use_meta=True,
+    )
+    val_dataset = RLDataset(
+        val_data,
+        tokenizer,
+        max_length=args.max_input_length,
+        use_meta=True,
+    )
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.num_data_per_iteration,
