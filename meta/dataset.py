@@ -5,7 +5,9 @@ from .prompt import DIRECT_QA_PROMPT
 
 
 class RLDataset(Dataset):
-    def __init__(self, dataset: Dataset, tokenizer: PreTrainedTokenizer, max_length: int = 512, prompt: str = DIRECT_QA_PROMPT):
+    def __init__(
+        self, dataset: Dataset, tokenizer: PreTrainedTokenizer, max_length: int = 512, prompt: str = DIRECT_QA_PROMPT
+    ):
         """Initialize RL dataset.
 
         Args:
@@ -50,3 +52,9 @@ class RLDataset(Dataset):
         }
 
 
+def simple_collate_fn(batch: list[dict]) -> list[dict]:
+    return {
+        "input_ids": [item["input_ids"] for item in batch],
+        "attention_mask": [item["attention_mask"] for item in batch],
+        "answers": [item["answers"] for item in batch],
+    }
