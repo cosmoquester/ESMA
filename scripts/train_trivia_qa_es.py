@@ -42,6 +42,8 @@ parser.add_argument("--num-samples", type=int, help="Number of samples to load")
 parser.add_argument("--num-workers", type=int, default=os.cpu_count() // 2, help="Number of workers")
 parser.add_argument("--seed", type=int, default=42, help="Random seed")
 parser.add_argument("--output-dir", type=str, help="Output directory")
+parser.add_argument("--model-save-interval", type=int, default=50, help="Model save interval")
+parser.add_argument("--evaluate-interval", type=int, default=50, help="Evaluate interval")
 parser.add_argument("--wandb-run-name", type=str, help="Wandb run name")
 parser.add_argument("--wandb-project", type=str, default="meta-cognition", help="Wandb project")
 parser.add_argument("--wandb-entity", type=str, default="cosmoquester", help="Wandb entity")
@@ -113,6 +115,9 @@ def main(args):
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
         logger.info(f"[+] Output directory: {args.output_dir}")
+        checkpoint_dir = os.path.join(args.output_dir, "checkpoints")
+    else:
+        checkpoint_dir = None
     if args.wandb_run_name is not None:
         import wandb
 
@@ -176,6 +181,12 @@ def main(args):
             logger.info(f"[+] Iteration {iteration + 1:03d} Rewards: {avg_reward:.4f}")
             if run is not None:
                 run.log({"rewards": avg_reward})
+
+            if iteration % args.model_save_interval == 0 and checkpoint_dir is not None:
+                model.save_pretrained(os.path.join(checkpoint_dir, f"iteration_{iteration:03d}"))
+                tokenizer.save_pretrained(os.path.join(checkpoint_dir, f"iteration_{iteration:03d}"))
+                logger.info(f"[+] Model saved to {os.path.join(checkpoint_dir, f'iteration_{iteration:03d}')}")
+
         normalized_rewards = (all_rewards - all_rewards.mean()) / (all_rewards.std() + 1e-8)
 
         apply_evolution(
