@@ -23,3 +23,7 @@ venv.bak/
 build/
 dist/
 *.egg-info/
+
+# output directory
+outputs/
+wandb/

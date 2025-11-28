@@ -24,7 +24,6 @@ parser.add_argument(
     default="Qwen/Qwen2.5-0.5B-Instruct",
     help="HuggingFace Model ID",
 )
-parser.add_argument("--split", type=str, default="train", help="Split to load")
 parser.add_argument("--batch-size", type=int, default=1, help="Batch size")
 parser.add_argument("--max-input-length", type=int, default=128, help="Maximum input length")
 parser.add_argument("--max-new-tokens", type=int, default=32, help="Maximum new tokens")
@@ -42,6 +41,10 @@ parser.add_argument(
 parser.add_argument("--num-samples", type=int, help="Number of samples to load")
 parser.add_argument("--num-workers", type=int, default=os.cpu_count() // 2, help="Number of workers")
 parser.add_argument("--seed", type=int, default=42, help="Random seed")
+parser.add_argument("--output-dir", type=str, help="Output directory")
+parser.add_argument("--wandb-run-name", type=str, help="Wandb run name")
+parser.add_argument("--wandb-project", type=str, default="meta-cognition", help="Wandb project")
+parser.add_argument("--wandb-entity", type=str, default="cosmoquester", help="Wandb entity")
 args = parser.parse_args()
 
 
@@ -103,11 +106,26 @@ def main(args):
         logger.setLevel(logging.CRITICAL)
     logger.info(f"[+] Accelerator num_processes: {accelerator.num_processes}")
 
+    if args.output_dir is not None and args.wandb_run_name is None:
+        args.wandb_run_name = os.path.basename(args.output_dir)
+    if args.output_dir is None and args.wandb_run_name is not None:
+        args.output_dir = os.path.join("outputs", args.wandb_run_name)
+    if args.output_dir is not None:
+        os.makedirs(args.output_dir, exist_ok=True)
+        logger.info(f"[+] Output directory: {args.output_dir}")
+    if args.wandb_run_name is not None:
+        import wandb
+
+        wandb.login()
+        run = wandb.init(project=args.wandb_project, entity=args.wandb_entity, name=args.wandb_run_name)
+    else:
+        run = None
+
     seed_everything(args.seed)
     logger.info(f"[+] Using seed: {args.seed}")
 
     logger.info("[+] Loading TriviaQA dataset...")
-    dataset = load_trivia_qa_rl(split=args.split, num_samples=args.num_samples)
+    dataset = load_trivia_qa_rl(split="train", num_samples=args.num_samples)
     logger.info(f"[+] Total samples: {len(dataset)}")
 
     logger.info(f"[+] Loading tokenizer {args.model}...")
@@ -133,11 +151,11 @@ def main(args):
 
     local_population_size = args.population_size // accelerator.num_processes
     population_seed_gen = np.random.RandomState(args.seed + accelerator.process_index)
+    logger.info("Starting training...")
     for iteration, iteration_batch in enumerate(infinite_loader):
         if iteration >= args.num_iterations:
             break
 
-        logger.info(f"[+] Iteration {iteration + 1} of {args.num_iterations}...")
         local_seeds = population_seed_gen.randint(0, 1000000, local_population_size)
         rewards = single_iteration(
             model,
@@ -153,6 +171,11 @@ def main(args):
         rewards_tensor = torch.tensor(rewards, dtype=torch.float32, device=accelerator.device)
         all_seeds = accelerator.gather(local_seeds_tensor)
         all_rewards = accelerator.gather(rewards_tensor)
+        if accelerator.is_main_process:
+            avg_reward = all_rewards.mean().item()
+            logger.info(f"[+] Iteration {iteration + 1:03d} Rewards: {avg_reward:.4f}")
+            if run is not None:
+                run.log({"rewards": avg_reward})
         normalized_rewards = (all_rewards - all_rewards.mean()) / (all_rewards.std() + 1e-8)
 
         apply_evolution(
