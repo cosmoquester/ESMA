@@ -226,15 +226,6 @@ def main(args):
                 model.save_pretrained(os.path.join(checkpoint_dir, f"iteration_{iteration:03d}"))
                 tokenizer.save_pretrained(os.path.join(checkpoint_dir, f"iteration_{iteration:03d}"))
                 logger.info(f"[+] Model saved to {os.path.join(checkpoint_dir, f'iteration_{iteration:03d}')}")
-
-        if iteration % args.evaluate_interval == 0:
-            val_rewards = evaluate_model(model, tokenizer, val_loader, args.max_new_tokens)
-            all_val_rewards = accelerator.gather(val_rewards)
-            avg_val_reward = all_val_rewards.mean().item()
-            logger.info(f"[+] Iteration {iteration + 1:03d} Val Rewards: {avg_val_reward:.4f}")
-            if run is not None and accelerator.is_main_process:
-                run.log({"val_rewards": avg_val_reward})
-
         normalized_rewards = (all_rewards - all_rewards.mean()) / (all_rewards.std() + 1e-8)
 
         apply_evolution(
@@ -243,6 +234,14 @@ def main(args):
             absolute_scale=args.alpha,
             relative_scales=normalized_rewards,
         )
+
+        if iteration % args.evaluate_interval == 0:
+            val_rewards = evaluate_model(model, tokenizer, val_loader, args.max_new_tokens)
+            all_val_rewards = accelerator.gather(val_rewards)
+            avg_val_reward = all_val_rewards.mean().item()
+            logger.info(f"[+] Iteration {iteration + 1:03d} Val Rewards: {avg_val_reward:.4f}")
+            if run is not None and accelerator.is_main_process:
+                run.log({"val_rewards": avg_val_reward})
 
 
 if __name__ == "__main__":
