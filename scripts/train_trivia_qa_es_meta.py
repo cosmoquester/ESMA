@@ -14,6 +14,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from meta.data import load_trivia_qa_rl
 from meta.dataset import RLDataset, pad_collate_fn, simple_collate_fn
 from meta.evolution import apply_evolution
+from meta.metric import meta_metrics
 from meta.utils import get_logger, seed_everything
 
 torch.set_grad_enabled(False)
@@ -63,8 +64,12 @@ def evaluate_model(
     tokenizer: AutoTokenizer,
     val_loader: DataLoader,
     max_new_tokens: int,
-) -> torch.Tensor:
-    rewards = []
+) -> dict[str, torch.Tensor]:
+    all_direct_correctness = []
+    all_yes = []
+    all_yes_failures = []
+    all_no_failures = []
+    all_meta_alignments = []
     for batch in val_loader:
         input_ids = batch["input_ids"].to(model.device)
         attention_mask = batch["attention_mask"].to(model.device)
@@ -77,11 +82,6 @@ def evaluate_model(
         generated_tokens = outputs[:, input_ids.shape[1] :]
         decoded_outputs = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
 
-        batch_answers = batch["answers"]
-        correctness = []
-        for decoded_output, answers in zip(decoded_outputs, batch_answers):
-            correctness.append(simple_reward(decoded_output, answers))
-
         meta_input_ids = batch["meta_input_ids"].to(model.device)
         meta_attention_mask = batch["meta_attention_mask"].to(model.device)
         meta_outputs = model.generate(
@@ -91,11 +91,26 @@ def evaluate_model(
         )
         meta_generated_tokens = meta_outputs[:, meta_input_ids.shape[1] :]
         meta_decoded_outputs = tokenizer.batch_decode(meta_generated_tokens, skip_special_tokens=True)
-        meta_yes = ["yes" in decoded_output.lower() for decoded_output in meta_decoded_outputs]
 
-        rewards.extend(int(correct == yes) for correct, yes in zip(correctness, meta_yes))
+        direct_correctness, yes, yes_failures, no_failures, meta_alignments = meta_metrics(
+            decoded_outputs, meta_decoded_outputs, batch["answers"]
+        )
 
-    return torch.tensor(rewards, dtype=torch.float32, device=model.device)
+        all_direct_correctness.extend(direct_correctness)
+        all_yes.extend(yes)
+        all_yes_failures.extend(yes_failures)
+        all_no_failures.extend(no_failures)
+        all_meta_alignments.extend(meta_alignments)
+
+    rewards = all_meta_alignments
+    return {
+        "rewards": torch.tensor(rewards, dtype=torch.float32, device=model.device),
+        "direct_correctness": torch.tensor(all_direct_correctness, dtype=torch.float32, device=model.device),
+        "yes": torch.tensor(all_yes, dtype=torch.float32, device=model.device),
+        "yes_failures": torch.tensor(all_yes_failures, dtype=torch.float32, device=model.device),
+        "no_failures": torch.tensor(all_no_failures, dtype=torch.float32, device=model.device),
+        "meta_alignments": torch.tensor(all_meta_alignments, dtype=torch.float32, device=model.device),
+    }
 
 
 def single_iteration(
@@ -107,7 +122,12 @@ def single_iteration(
     sigma: float,
     batch_size: int,
     max_new_tokens: int,
-) -> list[float]:
+) -> tuple[list[float], dict[str, torch.Tensor]]:
+    all_direct_correctness = []
+    all_yes = []
+    all_yes_failures = []
+    all_no_failures = []
+    all_meta_alignments = []
     rewards = []
     for seed in local_seeds:
         apply_evolution(model, seed, absolute_scale=sigma)
@@ -129,9 +149,6 @@ def single_iteration(
             )
             generated_tokens = outputs[:, batch["input_ids"].shape[1] :]
             decoded_outputs = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-            correctness = []
-            for decoded_output, answers in zip(decoded_outputs, batch["answers"]):
-                correctness.append(simple_reward(decoded_output, answers))
 
             batch["meta_input_ids"] = pad_sequence(batch["meta_input_ids"], batch_first=True, padding_side="left").to(
                 accelerator.device
@@ -146,11 +163,25 @@ def single_iteration(
             )
             meta_generated_tokens = meta_outputs[:, batch["meta_input_ids"].shape[1] :]
             meta_decoded_outputs = tokenizer.batch_decode(meta_generated_tokens, skip_special_tokens=True)
-            meta_yes = ["yes" in decoded_output.lower() for decoded_output in meta_decoded_outputs]
-            seed_rewards.extend(int(correct == yes) for correct, yes in zip(correctness, meta_yes))
+
+            direct_correctness, yes, yes_failures, no_failures, meta_alignments = meta_metrics(
+                decoded_outputs, meta_decoded_outputs, batch["answers"]
+            )
+            all_direct_correctness.extend(direct_correctness)
+            all_yes.extend(yes)
+            all_yes_failures.extend(yes_failures)
+            all_no_failures.extend(no_failures)
+            all_meta_alignments.extend(meta_alignments)
+            seed_rewards.extend(meta_alignments)
         rewards.append(np.mean(seed_rewards))
         apply_evolution(model, seed, absolute_scale=sigma, reverse=True)
-    return rewards
+    return rewards, {
+        "direct_correctness": torch.tensor(all_direct_correctness, dtype=torch.float32, device=model.device),
+        "yes": torch.tensor(all_yes, dtype=torch.float32, device=model.device),
+        "yes_failures": torch.tensor(all_yes_failures, dtype=torch.float32, device=model.device),
+        "no_failures": torch.tensor(all_no_failures, dtype=torch.float32, device=model.device),
+        "meta_alignments": torch.tensor(all_meta_alignments, dtype=torch.float32, device=model.device),
+    }
 
 
 def main(args):
@@ -241,7 +272,7 @@ def main(args):
             break
 
         local_seeds = population_seed_gen.randint(0, 1000000, local_population_size)
-        rewards = single_iteration(
+        rewards, metrics = single_iteration(
             model,
             tokenizer,
             iteration_batch,
@@ -256,11 +287,14 @@ def main(args):
         rewards_tensor = torch.tensor(rewards, dtype=torch.float32, device=accelerator.device)
         all_seeds = accelerator.gather(local_seeds_tensor)
         all_rewards = accelerator.gather(rewards_tensor)
+        all_metrics = {"train/" + k: accelerator.gather(v).mean().item() for k, v in metrics.items()}
         if accelerator.is_main_process:
             avg_reward = all_rewards.mean().item()
-            logger.info(f"[+] Iteration {iteration:03d} Rewards: {avg_reward:.4f}")
+            all_metrics["train/rewards"] = avg_reward
+            metric_str = ", ".join([f"{k}: {v:.4f}" for k, v in all_metrics.items()])
+            logger.info(f"[+] Iteration {iteration:03d} {metric_str}")
             if run is not None:
-                run.log({"rewards": avg_reward}, step=iteration)
+                run.log(all_metrics, step=iteration)
 
             if iteration % args.model_save_interval == 0 and checkpoint_dir is not None:
                 model.save_pretrained(os.path.join(checkpoint_dir, f"iteration_{iteration:03d}"))
@@ -276,12 +310,35 @@ def main(args):
         )
 
         if iteration % args.evaluate_interval == 0:
-            val_rewards = evaluate_model(model, tokenizer, val_loader, args.max_new_tokens)
-            all_val_rewards = accelerator.gather(val_rewards)
-            avg_val_reward = all_val_rewards.mean().item()
-            logger.info(f"[+] Iteration {iteration:03d} Val Rewards: {avg_val_reward:.4f}")
+            metrics = evaluate_model(model, tokenizer, val_loader, args.max_new_tokens)
+            all_val_metrics = {"val/" + k: accelerator.gather(v).mean().item() for k, v in metrics.items()}
+            metric_str = ", ".join([f"{k}: {v:.4f}" for k, v in all_val_metrics.items()])
+            logger.info(f"[+] Validation Iteration {iteration:03d} {metric_str}")
             if run is not None and accelerator.is_main_process:
-                run.log({"val_rewards": avg_val_reward}, step=iteration)
+                run.log(all_val_metrics, step=iteration)
+
+    test_data = load_trivia_qa_rl(split="test", num_samples=100)
+    test_dataset = RLDataset(
+        test_data,
+        tokenizer,
+        max_length=args.max_input_length,
+        use_meta=True,
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        collate_fn=pad_collate_fn,
+    )
+    test_loader = accelerator.prepare(test_loader)
+    test_metrics = evaluate_model(model, tokenizer, test_loader, args.max_new_tokens)
+    all_test_metrics = {"test/" + k: accelerator.gather(v).mean().item() for k, v in test_metrics.items()}
+    metric_str = ", ".join([f"{k}: {v:.4f}" for k, v in all_test_metrics.items()])
+    logger.info(f"[+] Test {metric_str}")
+    if run is not None and accelerator.is_main_process:
+        run.log(all_test_metrics, step=args.num_iterations)
 
 
 if __name__ == "__main__":
