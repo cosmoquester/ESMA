@@ -14,7 +14,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from meta.data import load_trivia_qa_rl
 from meta.dataset import RLDataset, pad_collate_fn, simple_collate_fn
 from meta.evolution import apply_evolution
-from meta.metric import meta_metrics
+from meta.metric import IGNORE_VALUE, meta_metrics
 from meta.utils import get_logger, seed_everything
 
 torch.set_grad_enabled(False)
@@ -103,7 +103,7 @@ def evaluate_model(
         meta_decoded_outputs = tokenizer.batch_decode(meta_generated_tokens, skip_special_tokens=True)
 
         direct_correctness, yes, yes_failures, no_failures, meta_alignments = meta_metrics(
-            decoded_outputs, meta_decoded_outputs, batch["answers"]
+            decoded_outputs, meta_decoded_outputs, batch["answers"], keep_length=True
         )
 
         all_direct_correctness.extend(direct_correctness)
@@ -174,7 +174,7 @@ def single_iteration(
             meta_decoded_outputs = tokenizer.batch_decode(meta_generated_tokens, skip_special_tokens=True)
 
             direct_correctness, yes, yes_failures, no_failures, meta_alignments = meta_metrics(
-                decoded_outputs, meta_decoded_outputs, batch["answers"]
+                decoded_outputs, meta_decoded_outputs, batch["answers"], keep_length=True
             )
             all_direct_correctness.extend(direct_correctness)
             all_yes.extend(yes)
@@ -185,11 +185,11 @@ def single_iteration(
         rewards.append(np.mean(seed_rewards))
         apply_evolution(model, seed, absolute_scale=sigma, reverse=True)
     return rewards, {
-        "direct_correctness": torch.tensor(all_direct_correctness, dtype=torch.float32, device=model.device),
-        "yes": torch.tensor(all_yes, dtype=torch.float32, device=model.device),
-        "yes_failures": torch.tensor(all_yes_failures, dtype=torch.float32, device=model.device),
-        "no_failures": torch.tensor(all_no_failures, dtype=torch.float32, device=model.device),
-        "meta_alignments": torch.tensor(all_meta_alignments, dtype=torch.float32, device=model.device),
+        "direct_correctness": torch.tensor(all_direct_correctness, dtype=torch.float32, device=accelerator.device),
+        "yes": torch.tensor(all_yes, dtype=torch.float32, device=accelerator.device),
+        "yes_failures": torch.tensor(all_yes_failures, dtype=torch.float32, device=accelerator.device),
+        "no_failures": torch.tensor(all_no_failures, dtype=torch.float32, device=accelerator.device),
+        "meta_alignments": torch.tensor(all_meta_alignments, dtype=torch.float32, device=accelerator.device),
     }
 
 
@@ -296,7 +296,8 @@ def main(args):
         rewards_tensor = torch.tensor(rewards, dtype=torch.float32, device=accelerator.device)
         all_seeds = accelerator.gather(local_seeds_tensor)
         all_rewards = accelerator.gather(rewards_tensor)
-        all_metrics = {"train/" + k: accelerator.gather(v).mean().item() for k, v in metrics.items()}
+        all_metrics = {"train/" + k: accelerator.gather(v) for k, v in sorted(metrics.items())}
+        all_metrics = {k: v[v != IGNORE_VALUE].mean().item() for k, v in all_metrics.items()}
         if accelerator.is_main_process:
             avg_reward = all_rewards.mean().item()
             all_metrics["train/rewards"] = avg_reward
@@ -320,7 +321,8 @@ def main(args):
 
         if iteration % args.evaluate_interval == 0:
             metrics = evaluate_model(model, tokenizer, val_loader, args.max_new_tokens)
-            all_val_metrics = {"val/" + k: accelerator.gather(v).mean().item() for k, v in metrics.items()}
+            all_val_metrics = {"val/" + k: accelerator.gather(v) for k, v in sorted(metrics.items())}
+            all_val_metrics = {k: v[v != IGNORE_VALUE].mean().item() for k, v in all_val_metrics.items()}
             metric_str = ", ".join([f"{k}: {v:.4f}" for k, v in all_val_metrics.items()])
             logger.info(f"[+] Validation Iteration {iteration:03d} {metric_str}")
             if run is not None and accelerator.is_main_process:
@@ -343,7 +345,8 @@ def main(args):
     )
     test_loader = accelerator.prepare(test_loader)
     test_metrics = evaluate_model(model, tokenizer, test_loader, args.max_new_tokens)
-    all_test_metrics = {"test/" + k: accelerator.gather(v).mean().item() for k, v in test_metrics.items()}
+    all_test_metrics = {"test/" + k: accelerator.gather(v) for k, v in sorted(test_metrics.items())}
+    all_test_metrics = {k: v[v != IGNORE_VALUE].mean().item() for k, v in all_test_metrics.items()}
     metric_str = ", ".join([f"{k}: {v:.4f}" for k, v in all_test_metrics.items()])
     logger.info(f"[+] Test {metric_str}")
     if run is not None and accelerator.is_main_process:
