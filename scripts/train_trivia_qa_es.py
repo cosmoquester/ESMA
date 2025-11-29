@@ -97,7 +97,7 @@ def single_iteration(
         apply_evolution(model, seed, absolute_scale=sigma)
 
         seed_rewards = []
-        for i in range(0, len(iteration_batch), batch_size):
+        for i in range(0, len(iteration_batch["answers"]), batch_size):
             input_ids = pad_sequence(
                 iteration_batch["input_ids"][i : i + batch_size],
                 batch_first=True,
@@ -150,6 +150,7 @@ def main(args):
             project=args.wandb_project,
             entity=args.wandb_entity,
             name=args.wandb_run_name,
+            dir=args.output_dir,
         )
         run.config.update(vars(args))
     else:
@@ -189,7 +190,7 @@ def main(args):
     val_loader = accelerator.prepare(val_loader)
 
     logger.info(f"[+] Loading model {args.model}...")
-    model = AutoModelForCausalLM.from_pretrained(args.model)
+    model = AutoModelForCausalLM.from_pretrained(args.model, dtype="auto")
     model.eval()
     model.to(accelerator.device)
     logger.info("[+] Loaded model successfully")
