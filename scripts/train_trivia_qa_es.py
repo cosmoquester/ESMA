@@ -198,7 +198,7 @@ def main(args):
     local_population_size = args.population_size // accelerator.num_processes
     population_seed_gen = np.random.RandomState(args.seed + accelerator.process_index)
     logger.info("Starting training...")
-    for iteration, iteration_batch in enumerate(infinite_loader):
+    for iteration, iteration_batch in enumerate(infinite_loader, start=1):
         if iteration >= args.num_iterations:
             break
 
@@ -220,7 +220,7 @@ def main(args):
         all_rewards = accelerator.gather(rewards_tensor)
         if accelerator.is_main_process:
             avg_reward = all_rewards.mean().item()
-            logger.info(f"[+] Iteration {iteration + 1:03d} Rewards: {avg_reward:.4f}")
+            logger.info(f"[+] Iteration {iteration:03d} Rewards: {avg_reward:.4f}")
             if run is not None:
                 run.log({"rewards": avg_reward})
 
@@ -241,7 +241,7 @@ def main(args):
             val_rewards = evaluate_model(model, tokenizer, val_loader, args.max_new_tokens)
             all_val_rewards = accelerator.gather(val_rewards)
             avg_val_reward = all_val_rewards.mean().item()
-            logger.info(f"[+] Iteration {iteration + 1:03d} Val Rewards: {avg_val_reward:.4f}")
+            logger.info(f"[+] Iteration {iteration:03d} Val Rewards: {avg_val_reward:.4f}")
             if run is not None and accelerator.is_main_process:
                 run.log({"val_rewards": avg_val_reward})
 
