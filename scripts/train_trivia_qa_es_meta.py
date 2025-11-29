@@ -114,28 +114,40 @@ def single_iteration(
 
         seed_rewards = []
         for i in range(0, len(iteration_batch["answers"]), batch_size):
-            input_ids = pad_sequence(
-                iteration_batch["input_ids"][i : i + batch_size],
-                batch_first=True,
-                padding_side="left",
-            ).to(accelerator.device)
-            attention_mask = pad_sequence(
-                iteration_batch["attention_mask"][i : i + batch_size],
-                batch_first=True,
-                padding_side="left",
-            ).to(accelerator.device)
+            batch = {k: v[i : i + batch_size] for k, v in iteration_batch.items()}
+            batch["input_ids"] = pad_sequence(batch["input_ids"], batch_first=True, padding_side="left").to(
+                accelerator.device
+            )
+            batch["attention_mask"] = pad_sequence(batch["attention_mask"], batch_first=True, padding_side="left").to(
+                accelerator.device
+            )
 
             outputs = model.generate(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
+                input_ids=batch["input_ids"],
+                attention_mask=batch["attention_mask"],
                 max_new_tokens=max_new_tokens,
             )
-            generated_tokens = outputs[:, input_ids.shape[1] :]
+            generated_tokens = outputs[:, batch["input_ids"].shape[1] :]
             decoded_outputs = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+            correctness = []
+            for decoded_output, answers in zip(decoded_outputs, batch["answers"]):
+                correctness.append(simple_reward(decoded_output, answers))
 
-            batch_answers = iteration_batch["answers"][i : i + batch_size]
-            for decoded_output, answers in zip(decoded_outputs, batch_answers):
-                seed_rewards.append(simple_reward(decoded_output, answers))
+            batch["meta_input_ids"] = pad_sequence(batch["meta_input_ids"], batch_first=True, padding_side="left").to(
+                accelerator.device
+            )
+            batch["meta_attention_mask"] = pad_sequence(
+                batch["meta_attention_mask"], batch_first=True, padding_side="left"
+            ).to(accelerator.device)
+            meta_outputs = model.generate(
+                input_ids=batch["meta_input_ids"],
+                attention_mask=batch["meta_attention_mask"],
+                max_new_tokens=max_new_tokens,
+            )
+            meta_generated_tokens = meta_outputs[:, batch["meta_input_ids"].shape[1] :]
+            meta_decoded_outputs = tokenizer.batch_decode(meta_generated_tokens, skip_special_tokens=True)
+            meta_yes = ["yes" in decoded_output.lower() for decoded_output in meta_decoded_outputs]
+            seed_rewards.extend(int(correct == yes) for correct, yes in zip(correctness, meta_yes))
         rewards.append(np.mean(seed_rewards))
         apply_evolution(model, seed, absolute_scale=sigma, reverse=True)
     return rewards
