@@ -248,7 +248,7 @@ def main(args):
             avg_reward = all_rewards.mean().item()
             logger.info(f"[+] Iteration {iteration:03d} Rewards: {avg_reward:.4f}")
             if run is not None:
-                run.log({"rewards": avg_reward})
+                run.log({"rewards": avg_reward}, step=iteration)
 
             if iteration % args.model_save_interval == 0 and checkpoint_dir is not None:
                 model.save_pretrained(os.path.join(checkpoint_dir, f"iteration_{iteration:03d}"))
@@ -269,7 +269,7 @@ def main(args):
             avg_val_reward = all_val_rewards.mean().item()
             logger.info(f"[+] Iteration {iteration:03d} Val Rewards: {avg_val_reward:.4f}")
             if run is not None and accelerator.is_main_process:
-                run.log({"val_rewards": avg_val_reward})
+                run.log({"val_rewards": avg_val_reward}, step=iteration)
 
 
 if __name__ == "__main__":
