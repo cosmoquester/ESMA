@@ -31,7 +31,7 @@ parser.add_argument("--max-input-length", type=int, default=128, help="Maximum i
 parser.add_argument("--max-new-tokens", type=int, default=32, help="Maximum new tokens")
 parser.add_argument("--sigma", type=float, default=1e-3, help="Sigma")
 parser.add_argument("--alpha", type=float, default=5e-4, help="Alpha")
-parser.add_argument("--num-iterations", type=int, default=1000, help="Number of iterations")
+parser.add_argument("--num-iterations", type=int, default=300, help="Number of iterations")
 parser.add_argument("--population-size", type=int, default=32, help="Population size")
 parser.add_argument(
     "--num-data-per-iteration",
@@ -45,18 +45,27 @@ parser.add_argument("--num-val-samples", type=int, help="Number of samples to lo
 parser.add_argument("--num-workers", type=int, default=os.cpu_count() // 2, help="Number of workers")
 parser.add_argument("--seed", type=int, default=42, help="Random seed")
 parser.add_argument("--output-dir", type=str, help="Output directory")
-parser.add_argument("--model-save-interval", type=int, default=50, help="Model save interval")
-parser.add_argument("--evaluate-interval", type=int, default=50, help="Evaluate interval")
+parser.add_argument("--model-save-interval", type=int, default=60, help="Model save interval")
+parser.add_argument("--evaluate-interval", type=int, default=60, help="Evaluate interval")
 parser.add_argument("--wandb-run-name", type=str, help="Wandb run name")
 parser.add_argument("--wandb-project", type=str, default="meta-cognition", help="Wandb project")
 parser.add_argument("--wandb-entity", type=str, default="cosmoquester", help="Wandb entity")
 
 
-def simple_reward(output: str, answers: list[str]) -> float:
-    for answer in answers:
-        if answer in output:
-            return 1
-    return 0
+def multilevel_reward(direct_correctness: list[int], meta_yes: list[int]) -> list[int]:
+    rewards = []
+    for correct, yes in zip(direct_correctness, meta_yes):
+        if correct == yes:
+            if correct:
+                rewards.append(3)
+            else:
+                rewards.append(2)
+        else:
+            if correct:
+                rewards.append(1)
+            else:
+                rewards.append(0)
+    return rewards
 
 
 def evaluate_model(
@@ -70,6 +79,7 @@ def evaluate_model(
     all_yes_failures = []
     all_no_failures = []
     all_meta_alignments = []
+    all_rewards = []
     for batch in val_loader:
         input_ids = batch["input_ids"].to(model.device)
         attention_mask = batch["attention_mask"].to(model.device)
@@ -101,10 +111,9 @@ def evaluate_model(
         all_yes_failures.extend(yes_failures)
         all_no_failures.extend(no_failures)
         all_meta_alignments.extend(meta_alignments)
-
-    rewards = all_meta_alignments
+        all_rewards.extend(multilevel_reward(direct_correctness, yes))
     return {
-        "rewards": torch.tensor(rewards, dtype=torch.float32, device=model.device),
+        "rewards": torch.tensor(all_rewards, dtype=torch.float32, device=model.device),
         "direct_correctness": torch.tensor(all_direct_correctness, dtype=torch.float32, device=model.device),
         "yes": torch.tensor(all_yes, dtype=torch.float32, device=model.device),
         "yes_failures": torch.tensor(all_yes_failures, dtype=torch.float32, device=model.device),
@@ -172,7 +181,7 @@ def single_iteration(
             all_yes_failures.extend(yes_failures)
             all_no_failures.extend(no_failures)
             all_meta_alignments.extend(meta_alignments)
-            seed_rewards.extend(meta_alignments)
+            seed_rewards.extend(multilevel_reward(direct_correctness, yes))
         rewards.append(np.mean(seed_rewards))
         apply_evolution(model, seed, absolute_scale=sigma, reverse=True)
     return rewards, {
