@@ -26,7 +26,7 @@ parser.add_argument(
     default="Qwen/Qwen2.5-0.5B-Instruct",
     help="HuggingFace Model ID",
 )
-parser.add_argument("--batch-size", type=int, default=1, help="Batch size")
+parser.add_argument("--batch-size", type=int, default=256, help="Batch size")
 parser.add_argument("--max-input-length", type=int, default=128, help="Maximum input length")
 parser.add_argument("--max-new-tokens", type=int, default=32, help="Maximum new tokens")
 parser.add_argument("--sigma", type=float, default=1e-3, help="Sigma")
@@ -37,7 +37,7 @@ parser.add_argument(
     "--num-data-per-iteration",
     "-n",
     type=int,
-    default=1000,
+    default=256,
     help="Number of data per iteration",
 )
 parser.add_argument("--num-samples", type=int, help="Number of samples to load")
