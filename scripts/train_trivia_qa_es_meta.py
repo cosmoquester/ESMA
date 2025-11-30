@@ -52,7 +52,7 @@ parser.add_argument("--wandb-run-name", type=str, help="Wandb run name")
 parser.add_argument("--wandb-project", type=str, default="meta-cognition", help="Wandb project")
 parser.add_argument("--wandb-entity", type=str, default="cosmoquester", help="Wandb entity")
 parser.add_argument(
-    "--reward-type", type=str, default="multilevel2", choices=REWARD_TYPE_TO_FUNCTION.keys(), help="Reward type"
+    "--reward-type", type=str, default="multilevel", choices=REWARD_TYPE_TO_FUNCTION.keys(), help="Reward type"
 )
 
 
