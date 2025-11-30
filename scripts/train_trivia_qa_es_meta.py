@@ -277,7 +277,7 @@ def main(args):
     population_seed_gen = np.random.RandomState(args.seed + accelerator.process_index)
     logger.info("Starting training...")
     for iteration, iteration_batch in enumerate(infinite_loader, start=1):
-        if iteration >= args.num_iterations:
+        if iteration > args.num_iterations:
             break
 
         local_seeds = population_seed_gen.randint(0, 1000000, local_population_size)
