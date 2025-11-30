@@ -15,6 +15,7 @@ from meta.data import load_trivia_qa_rl
 from meta.dataset import RLDataset, pad_collate_fn, simple_collate_fn
 from meta.evolution import apply_evolution
 from meta.metric import IGNORE_VALUE, meta_metrics
+from meta.reward import REWARD_TYPE_TO_FUNCTION
 from meta.utils import get_logger, seed_everything
 
 torch.set_grad_enabled(False)
@@ -50,22 +51,9 @@ parser.add_argument("--evaluate-interval", type=int, default=60, help="Evaluate 
 parser.add_argument("--wandb-run-name", type=str, help="Wandb run name")
 parser.add_argument("--wandb-project", type=str, default="meta-cognition", help="Wandb project")
 parser.add_argument("--wandb-entity", type=str, default="cosmoquester", help="Wandb entity")
-
-
-def multilevel_reward(direct_correctness: list[int], meta_yes: list[int]) -> list[int]:
-    rewards = []
-    for correct, yes in zip(direct_correctness, meta_yes):
-        if correct == yes:
-            if correct:
-                rewards.append(3)
-            else:
-                rewards.append(2)
-        else:
-            if correct:
-                rewards.append(1)
-            else:
-                rewards.append(0)
-    return rewards
+parser.add_argument(
+    "--reward-type", type=str, default="multilevel2", choices=REWARD_TYPE_TO_FUNCTION.keys(), help="Reward type"
+)
 
 
 def evaluate_model(
@@ -73,6 +61,7 @@ def evaluate_model(
     tokenizer: AutoTokenizer,
     val_loader: DataLoader,
     max_new_tokens: int,
+    reward_type: str,
 ) -> dict[str, torch.Tensor]:
     all_direct_correctness = []
     all_yes = []
@@ -111,7 +100,7 @@ def evaluate_model(
         all_yes_failures.extend(yes_failures)
         all_no_failures.extend(no_failures)
         all_meta_alignments.extend(meta_alignments)
-        all_rewards.extend(multilevel_reward(direct_correctness, yes))
+        all_rewards.extend(REWARD_TYPE_TO_FUNCTION[reward_type](direct_correctness, yes))
     return {
         "rewards": torch.tensor(all_rewards, dtype=torch.float32, device=model.device),
         "direct_correctness": torch.tensor(all_direct_correctness, dtype=torch.float32, device=model.device),
@@ -131,6 +120,7 @@ def single_iteration(
     sigma: float,
     batch_size: int,
     max_new_tokens: int,
+    reward_type: str,
 ) -> tuple[list[float], dict[str, torch.Tensor]]:
     all_direct_correctness = []
     all_yes = []
@@ -181,7 +171,7 @@ def single_iteration(
             all_yes_failures.extend(yes_failures)
             all_no_failures.extend(no_failures)
             all_meta_alignments.extend(meta_alignments)
-            seed_rewards.extend(multilevel_reward(direct_correctness, yes))
+            seed_rewards.extend(REWARD_TYPE_TO_FUNCTION[reward_type](direct_correctness, yes))
         rewards.append(np.mean(seed_rewards))
         apply_evolution(model, seed, absolute_scale=sigma, reverse=True)
     return rewards, {
@@ -290,6 +280,7 @@ def main(args):
             args.sigma,
             args.batch_size,
             args.max_new_tokens,
+            args.reward_type,
         )
 
         local_seeds_tensor = torch.tensor(local_seeds, dtype=torch.long, device=accelerator.device)
@@ -320,7 +311,7 @@ def main(args):
         )
 
         if iteration % args.evaluate_interval == 0:
-            metrics = evaluate_model(model, tokenizer, val_loader, args.max_new_tokens)
+            metrics = evaluate_model(model, tokenizer, val_loader, args.max_new_tokens, args.reward_type)
             all_val_metrics = {"val/" + k: accelerator.gather(v) for k, v in sorted(metrics.items())}
             all_val_metrics = {k: v[v != IGNORE_VALUE].mean().item() for k, v in all_val_metrics.items()}
             metric_str = ", ".join([f"{k}: {v:.4f}" for k, v in all_val_metrics.items()])
@@ -344,7 +335,7 @@ def main(args):
         collate_fn=pad_collate_fn,
     )
     test_loader = accelerator.prepare(test_loader)
-    test_metrics = evaluate_model(model, tokenizer, test_loader, args.max_new_tokens)
+    test_metrics = evaluate_model(model, tokenizer, test_loader, args.max_new_tokens, args.reward_type)
     all_test_metrics = {"test/" + k: accelerator.gather(v) for k, v in sorted(test_metrics.items())}
     all_test_metrics = {k: v[v != IGNORE_VALUE].mean().item() for k, v in all_test_metrics.items()}
     metric_str = ", ".join([f"{k}: {v:.4f}" for k, v in all_test_metrics.items()])
