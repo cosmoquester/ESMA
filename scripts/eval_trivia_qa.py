@@ -8,7 +8,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from meta.data import load_trivia_qa_rl
 from meta.dataset import RLDataset, pad_collate_fn
-from meta.metric import meta_metrics
+from meta.metric import IGNORE_VALUE, meta_metrics
 from meta.utils import get_logger, normalize_answer, seed_everything
 
 parser = argparse.ArgumentParser(description="Evaluate LLM on TriviaQA and save to TSV")
@@ -160,6 +160,20 @@ def main(args):
                 ]
             )
     logger.info(f"[+] Results saved to: {args.output_path}")
+    logger.info(f"[+] Exact match accuracy: {sum(all_direct_correctness) / len(all_direct_correctness):.2%}")
+    logger.info(f"[+] Yes rate: {sum(all_yes) / len(all_yes):.2%}")
+    logger.info(f"[+] Meta alignments: {sum(all_meta_alignments) / len(all_meta_alignments):.2%}")
+
+    all_yes_failures = [v for v in all_yes_failures if v != IGNORE_VALUE]
+    all_no_failures = [v for v in all_no_failures if v != IGNORE_VALUE]
+    if len(all_yes_failures) > 0:
+        logger.info(f"[+] Yes failures rate: {sum(all_yes_failures) / len(all_yes_failures):.2%}")
+    else:
+        logger.info("[-] All meta answers are No")
+    if len(all_no_failures) > 0:
+        logger.info(f"[+] No failures rate: {sum(all_no_failures) / len(all_no_failures):.2%}")
+    else:
+        logger.info("[-] All meta answers are Yes")
 
 
 if __name__ == "__main__":
