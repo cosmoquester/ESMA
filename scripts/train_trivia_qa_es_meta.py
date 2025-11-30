@@ -20,40 +20,35 @@ from meta.utils import get_logger, seed_everything
 
 torch.set_grad_enabled(False)
 
+# fmt: off
 parser = argparse.ArgumentParser(description="Train TriviaQA ES")
-parser.add_argument(
-    "--model",
-    type=str,
-    default="Qwen/Qwen2.5-0.5B-Instruct",
-    help="HuggingFace Model ID",
-)
-parser.add_argument("--batch-size", type=int, default=256, help="Batch size")
-parser.add_argument("--max-input-length", type=int, default=128, help="Maximum input length")
-parser.add_argument("--max-new-tokens", type=int, default=32, help="Maximum new tokens")
-parser.add_argument("--sigma", type=float, default=1e-3, help="Sigma")
-parser.add_argument("--alpha", type=float, default=5e-4, help="Alpha")
-parser.add_argument("--num-iterations", type=int, default=300, help="Number of iterations")
-parser.add_argument("--population-size", type=int, default=32, help="Population size")
-parser.add_argument(
-    "--num-data-per-iteration",
-    "-n",
-    type=int,
-    default=256,
-    help="Number of data per iteration",
-)
-parser.add_argument("--num-samples", type=int, help="Number of samples to load")
-parser.add_argument("--num-val-samples", type=int, help="Number of samples to load for validation")
-parser.add_argument("--num-workers", type=int, default=os.cpu_count() // 2, help="Number of workers")
-parser.add_argument("--seed", type=int, default=42, help="Random seed")
-parser.add_argument("--output-dir", type=str, help="Output directory")
-parser.add_argument("--model-save-interval", type=int, default=60, help="Model save interval")
-parser.add_argument("--evaluate-interval", type=int, default=60, help="Evaluate interval")
-parser.add_argument("--wandb-run-name", type=str, help="Wandb run name")
-parser.add_argument("--wandb-project", type=str, default="meta-cognition", help="Wandb project")
-parser.add_argument("--wandb-entity", type=str, default="cosmoquester", help="Wandb entity")
-parser.add_argument(
-    "--reward-type", type=str, default="multilevel", choices=REWARD_TYPE_TO_FUNCTION.keys(), help="Reward type"
-)
+parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace Model ID")
+
+g = parser.add_argument_group("Data")
+g.add_argument("--max-input-length", type=int, default=128, help="Maximum input length")
+g.add_argument("--max-new-tokens", type=int, default=32, help="Maximum new tokens")
+g.add_argument("--num-samples", type=int, help="Number of samples to load")
+g.add_argument("--num-val-samples", type=int, help="Number of samples to load for validation")
+
+g = parser.add_argument_group("Evolution")
+g.add_argument("--sigma", type=float, default=1e-3, help="Sigma")
+g.add_argument("--alpha", type=float, default=5e-4, help="Alpha")
+g.add_argument("--num-iterations", type=int, default=300, help="Number of iterations")
+g.add_argument("--population-size", type=int, default=32, help="Population size")
+g.add_argument( "--num-data-per-iteration", "-n", type=int, default=256, help="Number of data per iteration")
+g.add_argument( "--reward-type", type=str, default="multilevel", choices=REWARD_TYPE_TO_FUNCTION.keys(), help="Reward type")
+
+g = parser.add_argument_group("Experiment Settings")
+g.add_argument("--batch-size", type=int, default=256, help="Batch size")
+g.add_argument("--num-workers", type=int, default=os.cpu_count() // 2, help="Number of workers")
+g.add_argument("--seed", type=int, default=42, help="Random seed")
+g.add_argument("--output-dir", type=str, help="Output directory")
+g.add_argument("--model-save-interval", type=int, default=60, help="Model save interval")
+g.add_argument("--evaluate-interval", type=int, default=60, help="Evaluate interval")
+g.add_argument("--wandb-run-name", type=str, help="Wandb run name")
+g.add_argument("--wandb-project", type=str, default="meta-cognition", help="Wandb project")
+g.add_argument("--wandb-entity", type=str, default="cosmoquester", help="Wandb entity")
+# fmt: on
 
 
 def evaluate_model(
