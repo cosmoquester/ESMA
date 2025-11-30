@@ -1,34 +1,29 @@
 import argparse
 import csv
-import random
-import re
-import string
+import os
 
-import numpy as np
-import torch
-from datasets import load_dataset
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from meta.data import load_trivia_qa_rl
+from meta.dataset import RLDataset, pad_collate_fn
+from meta.metric import meta_metrics
+from meta.utils import get_logger, normalize_answer, seed_everything
 
-def normalize_answer(s):
-    def remove_articles(text):
-        return re.sub(r"\b(a|an|the)\b", " ", text)
-
-    def white_space_fix(text):
-        return " ".join(text.split())
-
-    def remove_punc(text):
-        exclude = set(string.punctuation)
-        return "".join(ch for ch in text if ch not in exclude)
-
-    def lower(text):
-        return text.lower()
-
-    return white_space_fix(remove_articles(remove_punc(lower(s))))
+parser = argparse.ArgumentParser(description="Evaluate LLM on TriviaQA and save to TSV")
+parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace Model ID")
+parser.add_argument("--split", type=str, default="validation", help="Split to evaluate")
+parser.add_argument("--batch-size", type=int, default=128, help="Batch size for inference")
+parser.add_argument("--num-samples", type=int, help="Number of samples to evaluate (0 for all)")
+parser.add_argument("--output-path", type=str, help="Output TSV file path")
+parser.add_argument("--max-input-length", type=int, default=128, help="Maximum length of the input text")
+parser.add_argument("--max-output-length", type=int, default=32, help="Maximum length of the output text")
+parser.add_argument("--num-workers", type=int, default=os.cpu_count() // 2, help="Number of workers")
+parser.add_argument("--seed", type=int, default=42, help="Random seed")
 
 
-def is_exact_match(prediction, ground_truths):
+def is_exact_match(prediction: str, ground_truths: list[str]) -> bool:
     norm_pred = normalize_answer(prediction)
     for truth in ground_truths:
         if normalize_answer(truth) in norm_pred:
@@ -37,21 +32,12 @@ def is_exact_match(prediction, ground_truths):
 
 
 def main(args):
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
-    print(f"Using seed: {args.seed}")
+    logger = get_logger(__name__)  # noqa: F821
 
-    print("Loading TriviaQA dataset...")
-    dataset = load_dataset("trivia_qa", "rc", split="validation")
+    seed_everything(args.seed)
+    logger.info(f"[+] Using seed: {args.seed}")
 
-    if args.num_samples > 0:
-        dataset = dataset.select(range(min(len(dataset), args.num_samples)))
-
-    print(f"Total samples to evaluate: {len(dataset)}")
-
-    print(f"Loading model: {args.model}")
+    logger.info(f"[+] Loading model: {args.model}")
     tokenizer = AutoTokenizer.from_pretrained(args.model, padding_side="left")
 
     if tokenizer.pad_token is None:
@@ -60,91 +46,121 @@ def main(args):
     model = AutoModelForCausalLM.from_pretrained(args.model, dtype="auto", device_map="auto")
     model.eval()
 
-    correct_count = 0
-    total_count = 0
-
-    batch_data = {"ids": [], "raw_questions": [], "prompts": [], "ground_truths": []}
+    logger.info("[+] Loading TriviaQA dataset...")
+    data = load_trivia_qa_rl(split=args.split, num_samples=args.num_samples)
+    dataset = RLDataset(data, tokenizer, max_length=args.max_input_length, use_meta=True)
+    data_loader = DataLoader(
+        dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=pad_collate_fn
+    )
+    logger.info(f"[+] Total samples to evaluate: {len(data)}")
 
     if args.output_path is None:
         base_model = args.model.split("/")[-1]
-        args.output_path = f"outputs/triviaqa_result_{base_model}_{args.num_samples}.tsv"
+        os.makedirs("eval_outputs", exist_ok=True)
+        args.output_path = f"eval_outputs/triviaqa_{base_model}_{args.split}_{args.num_samples}.tsv"
 
-    with open(args.output_path, mode="w", encoding="utf-8", newline="") as f:
+    all_question_ids = []
+    all_questions = []
+    all_ground_truths = []
+    all_predictions = []
+    all_meta_answers = []
+    all_direct_correctness = []
+    all_yes = []
+    all_yes_failures = []
+    all_no_failures = []
+    all_meta_alignments = []
+    for batch in tqdm(data_loader, total=len(data_loader), desc="Evaluating"):
+        input_ids = batch["input_ids"].to(model.device)
+        attention_mask = batch["attention_mask"].to(model.device)
+        outputs = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=args.max_output_length,
+        )
+
+        generated_tokens = outputs[:, input_ids.shape[1] :]
+        decoded_outputs = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+
+        meta_input_ids = batch["meta_input_ids"].to(model.device)
+        meta_attention_mask = batch["meta_attention_mask"].to(model.device)
+        meta_outputs = model.generate(
+            input_ids=meta_input_ids,
+            attention_mask=meta_attention_mask,
+            max_new_tokens=args.max_output_length,
+        )
+        meta_generated_tokens = meta_outputs[:, meta_input_ids.shape[1] :]
+        meta_decoded_outputs = tokenizer.batch_decode(meta_generated_tokens, skip_special_tokens=True)
+
+        direct_correctness, yes, yes_failures, no_failures, meta_alignments = meta_metrics(
+            decoded_outputs, meta_decoded_outputs, batch["answers"], keep_length=True
+        )
+
+        all_question_ids.extend(batch["question_id"])
+        all_questions.extend(batch["question"])
+        all_ground_truths.extend(batch["answers"])
+        all_predictions.extend(decoded_outputs)
+        all_meta_answers.extend(meta_decoded_outputs)
+        all_direct_correctness.extend(direct_correctness)
+        all_yes.extend(yes)
+        all_yes_failures.extend(yes_failures)
+        all_no_failures.extend(no_failures)
+        all_meta_alignments.extend(meta_alignments)
+
+    with open(args.output_path, mode="w", encoding="utf-8") as f:
         writer = csv.writer(f, delimiter="\t")
-        writer.writerow(["example_id", "question", "answer", "ground_truths", "correctness"])
-
-        for i, example in tqdm(enumerate(dataset), total=len(dataset), desc="Evaluating"):
-            qid = example["question_id"]
-            question = example["question"]
-            ground_truths = example["answer"]["aliases"]
-
-            if tokenizer.chat_template is not None:
-                messages = [{"role": "user", "content": question}]
-                prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-            else:
-                prompt = f"Question: {question}\nAnswer:"
-
-            batch_data["ids"].append(qid)
-            batch_data["raw_questions"].append(question)
-            batch_data["prompts"].append(prompt)
-            batch_data["ground_truths"].append(ground_truths)
-
-            if len(batch_data["prompts"]) == args.batch_size or i == len(dataset) - 1:
-                inputs = tokenizer(
-                    batch_data["prompts"],
-                    return_tensors="pt",
-                    padding=True,
-                    truncation=True,
-                    max_length=args.max_input_length,
-                ).to(model.device)
-
-                with torch.no_grad():
-                    outputs = model.generate(
-                        **inputs,
-                        max_new_tokens=args.max_output_length,
-                        do_sample=True,
-                        pad_token_id=tokenizer.pad_token_id,
-                        eos_token_id=tokenizer.eos_token_id,
-                    )
-
-                input_len = inputs["input_ids"].shape[1]
-                generated_tokens = outputs[:, input_len:]
-                decoded_preds = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-
-                for j, pred in enumerate(decoded_preds):
-                    current_id = batch_data["ids"][j]
-                    current_q = batch_data["raw_questions"][j]
-                    current_truths = batch_data["ground_truths"][j]
-
-                    pred_clean = pred.strip().split("\n")[0]
-
-                    is_correct = is_exact_match(pred_clean, current_truths)
-                    if is_correct:
-                        correct_count += 1
-                    total_count += 1
-
-                    writer.writerow([current_id, current_q, pred_clean, current_truths, int(is_correct)])
-
-                batch_data = {"ids": [], "raw_questions": [], "prompts": [], "ground_truths": []}
-
-    accuracy = correct_count / total_count if total_count > 0 else 0
-    print("\n" + "=" * 40)
-    print(f"Model: {args.model}")
-    print(f"Total Samples: {total_count}")
-    print(f"Accuracy: {accuracy:.2%}")
-    print(f"Results saved to: {args.output_path}")
-    print("=" * 40)
+        writer.writerow(
+            [
+                "question_id",
+                "question",
+                "ground_truths",
+                "prediction",
+                "meta_answer",
+                "direct_correctness",
+                "yes",
+                "yes_failures",
+                "no_failures",
+                "meta_alignments",
+            ]
+        )
+        for (
+            question_id,
+            question,
+            ground_truths,
+            prediction,
+            meta_answer,
+            direct_correctness,
+            yes,
+            yes_failures,
+            no_failures,
+            meta_alignments,
+        ) in zip(
+            all_question_ids,
+            all_questions,
+            all_ground_truths,
+            all_predictions,
+            all_meta_answers,
+            all_direct_correctness,
+            all_yes,
+            all_yes_failures,
+            all_no_failures,
+            all_meta_alignments,
+        ):
+            writer.writerow(
+                [
+                    question_id,
+                    question,
+                    str(ground_truths),
+                    prediction,
+                    meta_answer,
+                    direct_correctness,
+                    yes,
+                    yes_failures,
+                    no_failures,
+                    meta_alignments,
+                ]
+            )
+    logger.info(f"[+] Results saved to: {args.output_path}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate LLM on TriviaQA and save to TSV")
-
-    parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace Model ID")
-    parser.add_argument("--batch-size", type=int, default=1, help="Batch size for inference")
-    parser.add_argument("--num-samples", type=int, default=100, help="Number of samples to evaluate (0 for all)")
-    parser.add_argument("--output-path", type=str, help="Output TSV file path")
-    parser.add_argument("--max-input-length", type=int, default=2048, help="Maximum length of the input text")
-    parser.add_argument("--max-output-length", type=int, default=32, help="Maximum length of the output text")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    args = parser.parse_args()
-    main(args)
+    main(parser.parse_args())
