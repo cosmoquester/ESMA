@@ -12,6 +12,7 @@ class RLDataset(Dataset):
         tokenizer: PreTrainedTokenizer,
         max_length: int = 512,
         use_meta: bool = False,
+        prompt: str = DIRECT_QA_PROMPT,
     ):
         """Initialize RL dataset.
 
@@ -25,7 +26,7 @@ class RLDataset(Dataset):
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.max_length = max_length
-        self.prompt = DIRECT_QA_PROMPT
+        self.prompt = prompt
         self.meta_prompt = META_QA_PROMPT if use_meta else None
 
     def __len__(self) -> int:

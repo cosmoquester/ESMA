@@ -195,6 +195,7 @@ def main(args):
         os.makedirs(args.output_dir, exist_ok=True)
         logger.info(f"[+] Output directory: {args.output_dir}")
         checkpoint_dir = os.path.join(args.output_dir, "checkpoints")
+        basename = os.path.basename(args.output_dir)
     else:
         checkpoint_dir = None
     if args.wandb_run_name is not None and accelerator.is_main_process:
@@ -293,9 +294,10 @@ def main(args):
                 run.log(all_metrics, step=iteration)
 
             if iteration % args.model_save_interval == 0 and checkpoint_dir is not None:
-                model.save_pretrained(os.path.join(checkpoint_dir, f"iteration_{iteration:03d}"))
-                tokenizer.save_pretrained(os.path.join(checkpoint_dir, f"iteration_{iteration:03d}"))
-                logger.info(f"[+] Model saved to {os.path.join(checkpoint_dir, f'iteration_{iteration:03d}')}")
+                save_path = os.path.join(checkpoint_dir, f"{basename}_iter{iteration:03d}")
+                model.save_pretrained(save_path)
+                tokenizer.save_pretrained(save_path)
+                logger.info(f"[+] Model saved to {save_path}")
         normalized_rewards = (all_rewards - all_rewards.mean()) / (all_rewards.std() + 1e-8)
 
         apply_evolution(
