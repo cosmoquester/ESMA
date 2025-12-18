@@ -3,7 +3,7 @@ import os
 from datasets import Dataset, load_dataset
 
 
-def load_fictional_qa(split: str = "validation", num_samples: int | None = None) -> Dataset:
+def load_fictional_qa(split: str = "train", num_samples: int | None = None) -> Dataset:
     """Load FictionalQA dataset.
 
     Args:
@@ -24,23 +24,21 @@ def load_fictional_qa(split: str = "validation", num_samples: int | None = None)
                     - value: Value (string)
                     - type: Type of the answer
     """
-    dataset = load_dataset("tomg-group-umd/fictionalqa_reformatted_triviaqa", "trivia_qa_cbqa_ds", split=split)
+    dataset = load_dataset("tomg-group-umd/fictionalqa", "fict_qa", split=split)
     if num_samples is not None:
         dataset = dataset.select(range(min(len(dataset), num_samples)))
     return dataset
 
 
-def load_fictional_qa_rl(
-    split: str = "validation", num_samples: int | None = None, num_proc: int | None = None
-) -> Dataset:
+def load_fictional_qa_rl(split: str = "train", num_samples: int | None = None, num_proc: int | None = None) -> Dataset:
     if num_proc is None:
         num_proc = os.cpu_count() or 1
     dataset = load_fictional_qa(split, num_samples)
     return dataset.map(
         lambda x: {
             "question_id": x["question_id"],
-            "question": x["input"][10:-10],
-            "answers": [x["answer"]],
+            "question": x["question"],
+            "answers": [x["natural_answer"]],
         },
         num_proc=num_proc,
         remove_columns=dataset.column_names,
