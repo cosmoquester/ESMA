@@ -6,14 +6,17 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from meta.data import load_trivia_qa_rl
+from meta.data import load_boolq_rl, load_fictional_qa_rl, load_trivia_qa_rl
 from meta.dataset import RLDataset, pad_collate_fn
 from meta.metric import IGNORE_VALUE, meta_metrics
-from meta.prompt import DIRECT_QA_WITH_IDW_PROMPT
+from meta.prompt import BOOLQ_PROMPT_WITH_IDW, DIRECT_QA_PROMPT
 from meta.utils import get_logger, seed_everything
 
 parser = argparse.ArgumentParser(description="Evaluate LLM on TriviaQA and save to TSV")
 parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace Model ID")
+parser.add_argument(
+    "--dataset", type=str, default="triviaqa", choices=["triviaqa", "boolq", "fictionalqa"], help="Dataset to evaluate"
+)
 parser.add_argument("--split", type=str, default="validation", help="Split to evaluate")
 parser.add_argument("--batch-size", type=int, default=128, help="Batch size for inference")
 parser.add_argument("--num-samples", type=int, help="Number of samples to evaluate (0 for all)")
@@ -39,9 +42,21 @@ def main(args):
     model = AutoModelForCausalLM.from_pretrained(args.model, dtype="auto", device_map="auto")
     model.eval()
 
-    logger.info("[+] Loading TriviaQA dataset...")
-    data = load_trivia_qa_rl(split=args.split, num_samples=args.num_samples)
-    dataset = RLDataset(data, tokenizer, max_length=args.max_input_length, prompt=DIRECT_QA_WITH_IDW_PROMPT)
+    if args.dataset == "triviaqa":
+        logger.info("[+] Loading TriviaQA dataset...")
+        data = load_trivia_qa_rl(split=args.split, num_samples=args.num_samples)
+        prompt = DIRECT_QA_PROMPT
+    elif args.dataset == "boolq":
+        logger.info("[+] Loading BoolQ dataset...")
+        data = load_boolq_rl(split=args.split, num_samples=args.num_samples)
+        prompt = BOOLQ_PROMPT_WITH_IDW
+    elif args.dataset == "fictionalqa":
+        logger.info("[+] Loading FictionalQA dataset...")
+        data = load_fictional_qa_rl(split=args.split, num_samples=args.num_samples)
+        prompt = DIRECT_QA_PROMPT
+    else:
+        raise ValueError(f"Invalid dataset: {args.dataset}")
+    dataset = RLDataset(data, tokenizer, max_length=args.max_input_length, prompt=prompt)
     data_loader = DataLoader(
         dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=pad_collate_fn
     )
@@ -50,7 +65,7 @@ def main(args):
     if args.output_path is None:
         base_model = args.model.split("/")[-1]
         os.makedirs("eval_outputs", exist_ok=True)
-        args.output_path = f"eval_outputs/triviaqa_{base_model}_{args.split}_{args.num_samples}_idw.tsv"
+        args.output_path = f"eval_outputs/{args.dataset}_{base_model}_{args.split}_{args.num_samples}_idw.tsv"
 
     all_question_ids = []
     all_questions = []
