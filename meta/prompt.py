@@ -6,3 +6,9 @@ Answer: If you know the answer, return "Yes". If you don't know the answer, retu
 """
 
 DIRECT_QA_WITH_IDW_PROMPT = """{question} If you don't know the answer, just return "I don't know"."""
+
+BOOLQ_PROMPT = """{question} Answer with "true" or "false"."""
+
+BOOLQ_PROMPT_WITH_IDW = (
+    """{question} Answer with "true" or "false". If you don't know the answer, just return "I don't know"."""
+)
