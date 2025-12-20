@@ -1,0 +1,431 @@
+"""Supervised Fine-Tuning (SFT) for Language Models.
+
+This script implements standard SFT training using gradient-based optimization.
+Supports distributed training via Accelerate and logging via Wandb.
+"""
+
+import argparse
+import logging
+import os
+from functools import partial
+
+import torch
+import wandb
+from accelerate import Accelerator
+from meta.data import load_boolq_rl, load_fictional_qa_rl, load_trivia_qa_rl
+from meta.dataset import SFTDataset
+from meta.prompt import BOOLQ_PROMPT, DIRECT_QA_PROMPT
+from meta.utils import get_logger, seed_everything
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    get_linear_schedule_with_warmup,
+)
+
+# fmt: off
+parser = argparse.ArgumentParser(description="SFT Training for Language Models")
+parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace Model ID")
+
+g = parser.add_argument_group("Data")
+g.add_argument("--dataset", type=str, default="trivia_qa", choices=["trivia_qa", "fictional_qa", "boolq"])
+g.add_argument("--max-length", type=int, default=256, help="Maximum sequence length")
+g.add_argument("--num-samples", type=int, help="Number of training samples to load")
+g.add_argument("--num-val-samples", type=int, help="Number of validation samples to load")
+
+g = parser.add_argument_group("Training")
+g.add_argument("--epochs", type=int, default=3, help="Number of training epochs")
+g.add_argument("--batch-size", type=int, default=8, help="Per-device batch size")
+g.add_argument("--gradient-accumulation-steps", type=int, default=4, help="Gradient accumulation steps")
+g.add_argument("--learning-rate", "-lr", type=float, default=2e-5, help="Learning rate")
+g.add_argument("--weight-decay", type=float, default=0.01, help="Weight decay")
+g.add_argument("--warmup-ratio", type=float, default=0.1, help="Warmup ratio")
+g.add_argument("--max-grad-norm", type=float, default=1.0, help="Max gradient norm for clipping")
+g.add_argument("--scheduler", type=str, default="cosine", choices=["cosine", "linear"], help="LR scheduler")
+
+g = parser.add_argument_group("Experiment Settings")
+g.add_argument("--num-workers", type=int, default=4, help="Number of data loader workers")
+g.add_argument("--seed", type=int, default=42, help="Random seed")
+g.add_argument("--output-dir", type=str, help="Output directory")
+g.add_argument("--save-steps", type=int, default=500, help="Save checkpoint every N steps")
+g.add_argument("--eval-steps", type=int, default=100, help="Evaluate every N steps")
+g.add_argument("--logging-steps", type=int, default=10, help="Log every N steps")
+g.add_argument("--wandb-run-name", type=str, help="Wandb run name")
+g.add_argument("--wandb-project", type=str, default="meta-cognition-sft", help="Wandb project")
+g.add_argument("--wandb-entity", type=str, default="cosmoquester", help="Wandb entity")
+# fmt: on
+
+
+def sft_collate_fn(batch: list[dict], tokenizer: AutoTokenizer) -> dict:
+    """Collate function for SFT training with proper padding and labels."""
+    input_ids = [item["input_ids"] for item in batch]
+    attention_mask = [item["attention_mask"] for item in batch]
+
+    # Pad sequences (left padding for causal LM)
+    pad_token_id = (
+        tokenizer.pad_token_id
+        if tokenizer.pad_token_id is not None
+        else tokenizer.eos_token_id
+    )
+
+    # Find max length
+    max_len = max(ids.size(0) for ids in input_ids)
+
+    padded_input_ids = []
+    padded_attention_mask = []
+    labels = []
+
+    for ids, mask in zip(input_ids, attention_mask):
+        pad_len = max_len - ids.size(0)
+        # Left padding
+        padded_ids = torch.cat(
+            [torch.full((pad_len,), pad_token_id, dtype=ids.dtype), ids]
+        )
+        padded_mask = torch.cat([torch.zeros(pad_len, dtype=mask.dtype), mask])
+        # Labels: -100 for padding tokens (ignored in loss)
+        label = padded_ids.clone()
+        label[:pad_len] = -100
+
+        padded_input_ids.append(padded_ids)
+        padded_attention_mask.append(padded_mask)
+        labels.append(label)
+
+    return {
+        "input_ids": torch.stack(padded_input_ids),
+        "attention_mask": torch.stack(padded_attention_mask),
+        "labels": torch.stack(labels),
+    }
+
+
+def evaluate(
+    model: AutoModelForCausalLM,
+    val_loader: DataLoader,
+    accelerator: Accelerator,
+) -> dict[str, float]:
+    """Evaluate model on validation set."""
+    model.eval()
+    total_loss = 0.0
+    total_tokens = 0
+
+    with torch.no_grad():
+        for batch in val_loader:
+            outputs = model(
+                input_ids=batch["input_ids"],
+                attention_mask=batch["attention_mask"],
+                labels=batch["labels"],
+            )
+            # Count non-padding tokens
+            num_tokens = (batch["labels"] != -100).sum().item()
+            total_loss += outputs.loss.item() * num_tokens
+            total_tokens += num_tokens
+
+    # Gather across processes
+    total_loss_tensor = torch.tensor([total_loss], device=accelerator.device)
+    total_tokens_tensor = torch.tensor([total_tokens], device=accelerator.device)
+
+    gathered_loss = accelerator.gather(total_loss_tensor).sum().item()
+    gathered_tokens = accelerator.gather(total_tokens_tensor).sum().item()
+
+    avg_loss = gathered_loss / gathered_tokens if gathered_tokens > 0 else 0.0
+    perplexity = torch.exp(torch.tensor(avg_loss)).item()
+
+    model.train()
+    return {"val/loss": avg_loss, "val/perplexity": perplexity}
+
+
+def main(args):
+    logger = get_logger(__name__)
+
+    # Initialize accelerator
+    accelerator = Accelerator(
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        log_with="wandb" if args.wandb_run_name else None,
+    )
+
+    if not accelerator.is_main_process:
+        logger.setLevel(logging.CRITICAL)
+
+    logger.info(f"[+] Accelerator device: {accelerator.device}")
+    logger.info(f"[+] Num processes: {accelerator.num_processes}")
+    logger.info(f"[+] Gradient accumulation steps: {args.gradient_accumulation_steps}")
+
+    # Setup output directory
+    if args.output_dir is not None and args.wandb_run_name is None:
+        args.wandb_run_name = os.path.basename(args.output_dir)
+    if args.output_dir is None and args.wandb_run_name is not None:
+        args.output_dir = os.path.join("outputs", args.wandb_run_name)
+    if args.output_dir is not None:
+        os.makedirs(args.output_dir, exist_ok=True)
+        checkpoint_dir = os.path.join(args.output_dir, "checkpoints")
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        logger.info(f"[+] Output directory: {args.output_dir}")
+    else:
+        checkpoint_dir = None
+
+    # Initialize Wandb
+    if args.wandb_run_name is not None and accelerator.is_main_process:
+        wandb.login()
+        run = wandb.init(
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            name=args.wandb_run_name,
+            dir=args.output_dir,
+            config=vars(args),
+        )
+    else:
+        run = None
+
+    # Set seed
+    seed_everything(args.seed)
+    logger.info(f"[+] Using seed: {args.seed}")
+
+    # Load tokenizer
+    logger.info(f"[+] Loading tokenizer: {args.model}")
+    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+
+    # Load dataset
+    logger.info(f"[+] Loading {args.dataset} dataset...")
+    if args.dataset == "trivia_qa":
+        train_data = load_trivia_qa_rl(split="train", num_samples=args.num_samples)
+        val_data = load_trivia_qa_rl(
+            split="validation", num_samples=args.num_val_samples
+        )
+        prompt = DIRECT_QA_PROMPT
+    elif args.dataset == "fictional_qa":
+        train_data = load_fictional_qa_rl(split="train", num_samples=args.num_samples)
+        val_data = load_fictional_qa_rl(split="train", num_samples=args.num_val_samples)
+        prompt = DIRECT_QA_PROMPT
+    elif args.dataset == "boolq":
+        train_data = load_boolq_rl(split="train", num_samples=args.num_samples)
+        val_data = load_boolq_rl(split="validation", num_samples=args.num_val_samples)
+        prompt = BOOLQ_PROMPT
+    else:
+        raise ValueError(f"Unknown dataset: {args.dataset}")
+
+    logger.info(f"[+] Train samples: {len(train_data)}")
+    logger.info(f"[+] Validation samples: {len(val_data)}")
+
+    # Create datasets
+    train_dataset = SFTDataset(
+        train_data,
+        tokenizer,
+        max_length=args.max_length,
+        prompt=prompt,
+        seed=args.seed,
+    )
+    val_dataset = SFTDataset(
+        val_data,
+        tokenizer,
+        max_length=args.max_length,
+        prompt=prompt,
+        seed=args.seed,
+    )
+
+    # Create data loaders
+    collate_fn = partial(sft_collate_fn, tokenizer=tokenizer)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        collate_fn=collate_fn,
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        collate_fn=collate_fn,
+    )
+
+    # Load model
+    logger.info(f"[+] Loading model: {args.model}")
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model,
+        torch_dtype="auto",
+    )
+    model.train()
+    logger.info(
+        f"[+] Model loaded. Parameters: {sum(p.numel() for p in model.parameters()):,}"
+    )
+
+    # Setup optimizer
+    optimizer = AdamW(
+        model.parameters(),
+        lr=args.learning_rate,
+        weight_decay=args.weight_decay,
+    )
+
+    # Calculate total training steps
+    num_update_steps_per_epoch = len(train_loader) // args.gradient_accumulation_steps
+    total_training_steps = num_update_steps_per_epoch * args.epochs
+    warmup_steps = int(total_training_steps * args.warmup_ratio)
+
+    logger.info(f"[+] Total training steps: {total_training_steps}")
+    logger.info(f"[+] Warmup steps: {warmup_steps}")
+
+    # Setup scheduler
+    if args.scheduler == "cosine":
+        scheduler = CosineAnnealingLR(optimizer, T_max=total_training_steps, eta_min=0)
+    else:
+        scheduler = get_linear_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=warmup_steps,
+            num_training_steps=total_training_steps,
+        )
+
+    # Prepare with accelerator
+    model, optimizer, train_loader, val_loader, scheduler = accelerator.prepare(
+        model, optimizer, train_loader, val_loader, scheduler
+    )
+
+    # Training loop
+    global_step = 0
+    best_val_loss = float("inf")
+
+    logger.info("[+] Starting training...")
+    for epoch in range(1, args.epochs + 1):
+        logger.info(f"[+] Epoch {epoch}/{args.epochs}")
+
+        epoch_loss = 0.0
+        epoch_steps = 0
+
+        progress_bar = tqdm(
+            train_loader,
+            desc=f"Epoch {epoch}",
+            disable=not accelerator.is_main_process,
+        )
+
+        for batch in progress_bar:
+            with accelerator.accumulate(model):
+                outputs = model(
+                    input_ids=batch["input_ids"],
+                    attention_mask=batch["attention_mask"],
+                    labels=batch["labels"],
+                )
+                loss = outputs.loss
+
+                accelerator.backward(loss)
+
+                if accelerator.sync_gradients:
+                    accelerator.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+
+            epoch_loss += loss.item()
+            epoch_steps += 1
+
+            if accelerator.sync_gradients:
+                global_step += 1
+
+                # Logging
+                if global_step % args.logging_steps == 0:
+                    avg_loss = epoch_loss / epoch_steps
+                    current_lr = scheduler.get_last_lr()[0]
+
+                    progress_bar.set_postfix(
+                        {
+                            "loss": f"{avg_loss:.4f}",
+                            "lr": f"{current_lr:.2e}",
+                        }
+                    )
+
+                    if run is not None and accelerator.is_main_process:
+                        run.log(
+                            {
+                                "train/loss": loss.item(),
+                                "train/learning_rate": current_lr,
+                                "train/epoch": epoch,
+                            },
+                            step=global_step,
+                        )
+
+                # Evaluation
+                if global_step % args.eval_steps == 0:
+                    val_metrics = evaluate(model, val_loader, accelerator)
+
+                    if accelerator.is_main_process:
+                        logger.info(
+                            f"[+] Step {global_step}: "
+                            f"val_loss={val_metrics['val/loss']:.4f}, "
+                            f"val_ppl={val_metrics['val/perplexity']:.2f}"
+                        )
+
+                        if run is not None:
+                            run.log(val_metrics, step=global_step)
+
+                        # Save best model
+                        if (
+                            val_metrics["val/loss"] < best_val_loss
+                            and checkpoint_dir is not None
+                        ):
+                            best_val_loss = val_metrics["val/loss"]
+                            save_path = os.path.join(checkpoint_dir, "best")
+                            unwrapped_model = accelerator.unwrap_model(model)
+                            unwrapped_model.save_pretrained(save_path)
+                            tokenizer.save_pretrained(save_path)
+                            logger.info(f"[+] Best model saved to {save_path}")
+
+                # Save checkpoint
+                if global_step % args.save_steps == 0 and checkpoint_dir is not None:
+                    if accelerator.is_main_process:
+                        save_path = os.path.join(checkpoint_dir, f"step_{global_step}")
+                        unwrapped_model = accelerator.unwrap_model(model)
+                        unwrapped_model.save_pretrained(save_path)
+                        tokenizer.save_pretrained(save_path)
+                        logger.info(f"[+] Checkpoint saved to {save_path}")
+
+        # End of epoch evaluation
+        val_metrics = evaluate(model, val_loader, accelerator)
+        avg_epoch_loss = epoch_loss / epoch_steps
+
+        if accelerator.is_main_process:
+            logger.info(
+                f"[+] Epoch {epoch} complete: "
+                f"train_loss={avg_epoch_loss:.4f}, "
+                f"val_loss={val_metrics['val/loss']:.4f}, "
+                f"val_ppl={val_metrics['val/perplexity']:.2f}"
+            )
+
+            if run is not None:
+                run.log(
+                    {
+                        "epoch/train_loss": avg_epoch_loss,
+                        **val_metrics,
+                    },
+                    step=global_step,
+                )
+
+    # Save final model
+    if checkpoint_dir is not None and accelerator.is_main_process:
+        save_path = os.path.join(checkpoint_dir, "final")
+        unwrapped_model = accelerator.unwrap_model(model)
+        unwrapped_model.save_pretrained(save_path)
+        tokenizer.save_pretrained(save_path)
+        logger.info(f"[+] Final model saved to {save_path}")
+
+    # Final evaluation
+    val_metrics = evaluate(model, val_loader, accelerator)
+    if accelerator.is_main_process:
+        logger.info(
+            f"[+] Training complete! "
+            f"Final val_loss={val_metrics['val/loss']:.4f}, "
+            f"val_ppl={val_metrics['val/perplexity']:.2f}"
+        )
+
+    if run is not None:
+        run.finish()
+
+
+if __name__ == "__main__":
+    main(parser.parse_args())
