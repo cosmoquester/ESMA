@@ -1,5 +1,6 @@
 import random
 
+import torch
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer
@@ -110,6 +111,40 @@ class SFTDataset(Dataset):
             "attention_mask": tokens["attention_mask"].squeeze(0),
         }
         return example
+
+    def sft_collate_fn(self, batch: list[dict]) -> dict:
+        """Collate function for SFT training with proper padding and labels."""
+        input_ids = [item["input_ids"] for item in batch]
+        attention_mask = [item["attention_mask"] for item in batch]
+
+        pad_token_id = (
+            self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else self.tokenizer.eos_token_id
+        )
+
+        max_len = max(ids.size(0) for ids in input_ids)
+
+        padded_input_ids = []
+        padded_attention_mask = []
+        labels = []
+
+        for ids, mask in zip(input_ids, attention_mask):
+            pad_len = max_len - ids.size(0)
+            # Left padding
+            padded_ids = torch.cat([torch.full((pad_len,), pad_token_id, dtype=ids.dtype), ids])
+            padded_mask = torch.cat([torch.zeros(pad_len, dtype=mask.dtype), mask])
+            # Labels: -100 for padding tokens (ignored in loss)
+            label = padded_ids.clone()
+            label[:pad_len] = -100
+
+            padded_input_ids.append(padded_ids)
+            padded_attention_mask.append(padded_mask)
+            labels.append(label)
+
+        return {
+            "input_ids": torch.stack(padded_input_ids),
+            "attention_mask": torch.stack(padded_attention_mask),
+            "labels": torch.stack(labels),
+        }
 
 
 def simple_collate_fn(batch: list[dict]) -> list[dict]:

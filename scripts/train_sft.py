@@ -7,7 +7,6 @@ Supports distributed training via Accelerate and logging via Wandb.
 import argparse
 import logging
 import os
-from functools import partial
 
 import torch
 import wandb
@@ -58,41 +57,6 @@ g.add_argument("--wandb-run-name", type=str, help="Wandb run name")
 g.add_argument("--wandb-project", type=str, default="meta-cognition-sft", help="Wandb project")
 g.add_argument("--wandb-entity", type=str, default="cosmoquester", help="Wandb entity")
 # fmt: on
-
-
-def sft_collate_fn(batch: list[dict], tokenizer: AutoTokenizer) -> dict:
-    """Collate function for SFT training with proper padding and labels."""
-    input_ids = [item["input_ids"] for item in batch]
-    attention_mask = [item["attention_mask"] for item in batch]
-
-    # Pad sequences (left padding for causal LM)
-    pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
-
-    # Find max length
-    max_len = max(ids.size(0) for ids in input_ids)
-
-    padded_input_ids = []
-    padded_attention_mask = []
-    labels = []
-
-    for ids, mask in zip(input_ids, attention_mask):
-        pad_len = max_len - ids.size(0)
-        # Left padding
-        padded_ids = torch.cat([torch.full((pad_len,), pad_token_id, dtype=ids.dtype), ids])
-        padded_mask = torch.cat([torch.zeros(pad_len, dtype=mask.dtype), mask])
-        # Labels: -100 for padding tokens (ignored in loss)
-        label = padded_ids.clone()
-        label[:pad_len] = -100
-
-        padded_input_ids.append(padded_ids)
-        padded_attention_mask.append(padded_mask)
-        labels.append(label)
-
-    return {
-        "input_ids": torch.stack(padded_input_ids),
-        "attention_mask": torch.stack(padded_attention_mask),
-        "labels": torch.stack(labels),
-    }
 
 
 def evaluate(
@@ -221,14 +185,13 @@ def main(args):
     )
 
     # Create data loaders
-    collate_fn = partial(sft_collate_fn, tokenizer=tokenizer)
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
         pin_memory=True,
-        collate_fn=collate_fn,
+        collate_fn=train_dataset.sft_collate_fn,
     )
     val_loader = DataLoader(
         val_dataset,
@@ -236,7 +199,7 @@ def main(args):
         shuffle=False,
         num_workers=args.num_workers,
         pin_memory=True,
-        collate_fn=collate_fn,
+        collate_fn=val_dataset.sft_collate_fn,
     )
 
     # Load model
