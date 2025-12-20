@@ -30,11 +30,14 @@ def load_fictional_qa(split: str = "train", num_samples: int | None = None) -> D
     return dataset
 
 
-def load_fictional_qa_rl(split: str = "train", num_samples: int | None = None, num_proc: int | None = None) -> Dataset:
+def load_fictional_qa_rl(
+    split: str = "train", num_samples: int | None = None, num_proc: int | None = None, seed: int = 42
+) -> Dataset:
     if num_proc is None:
         num_proc = os.cpu_count() or 1
     dataset = load_fictional_qa(split, num_samples)
-    return dataset.map(
+    dataset = dataset.train_test_split(test_size=0.1, seed=seed, shuffle=True)
+    dataset["train"] = dataset["train"].map(
         lambda x: {
             "question_id": x["question_id"],
             "question": x["question"],
@@ -43,3 +46,11 @@ def load_fictional_qa_rl(split: str = "train", num_samples: int | None = None, n
         num_proc=num_proc,
         remove_columns=dataset.column_names,
     )
+    train_data, val_data = dataset.train_test_split(test_size=0.5, seed=seed, shuffle=True)
+
+    if split == "train":
+        return train_data
+    elif split == "validation":
+        return val_data
+    else:
+        raise ValueError(f"Invalid split: {split}")

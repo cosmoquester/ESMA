@@ -12,10 +12,6 @@ from functools import partial
 import torch
 import wandb
 from accelerate import Accelerator
-from meta.data import load_boolq_rl, load_fictional_qa_rl, load_trivia_qa_rl
-from meta.dataset import SFTDataset
-from meta.prompt import BOOLQ_PROMPT, DIRECT_QA_PROMPT
-from meta.utils import get_logger, seed_everything
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
@@ -26,18 +22,23 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 
+from meta.data import load_boolq_rl, load_fictional_qa_rl, load_trivia_qa_rl
+from meta.dataset import SFTDataset
+from meta.prompt import BOOLQ_PROMPT, DIRECT_QA_PROMPT
+from meta.utils import get_logger, seed_everything
+
 # fmt: off
 parser = argparse.ArgumentParser(description="SFT Training for Language Models")
 parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace Model ID")
 
 g = parser.add_argument_group("Data")
-g.add_argument("--dataset", type=str, default="trivia_qa", choices=["trivia_qa", "fictional_qa", "boolq"])
+g.add_argument("--dataset", type=str, default="trivia_qa", choices=["fictional_qa", "fictional_qa", "boolq"])
 g.add_argument("--max-length", type=int, default=256, help="Maximum sequence length")
 g.add_argument("--num-samples", type=int, help="Number of training samples to load")
 g.add_argument("--num-val-samples", type=int, help="Number of validation samples to load")
 
 g = parser.add_argument_group("Training")
-g.add_argument("--epochs", type=int, default=3, help="Number of training epochs")
+g.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
 g.add_argument("--batch-size", type=int, default=8, help="Per-device batch size")
 g.add_argument("--gradient-accumulation-steps", type=int, default=4, help="Gradient accumulation steps")
 g.add_argument("--learning-rate", "-lr", type=float, default=2e-5, help="Learning rate")
@@ -65,11 +66,7 @@ def sft_collate_fn(batch: list[dict], tokenizer: AutoTokenizer) -> dict:
     attention_mask = [item["attention_mask"] for item in batch]
 
     # Pad sequences (left padding for causal LM)
-    pad_token_id = (
-        tokenizer.pad_token_id
-        if tokenizer.pad_token_id is not None
-        else tokenizer.eos_token_id
-    )
+    pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
 
     # Find max length
     max_len = max(ids.size(0) for ids in input_ids)
@@ -81,9 +78,7 @@ def sft_collate_fn(batch: list[dict], tokenizer: AutoTokenizer) -> dict:
     for ids, mask in zip(input_ids, attention_mask):
         pad_len = max_len - ids.size(0)
         # Left padding
-        padded_ids = torch.cat(
-            [torch.full((pad_len,), pad_token_id, dtype=ids.dtype), ids]
-        )
+        padded_ids = torch.cat([torch.full((pad_len,), pad_token_id, dtype=ids.dtype), ids])
         padded_mask = torch.cat([torch.zeros(pad_len, dtype=mask.dtype), mask])
         # Labels: -100 for padding tokens (ignored in loss)
         label = padded_ids.clone()
@@ -193,13 +188,11 @@ def main(args):
     logger.info(f"[+] Loading {args.dataset} dataset...")
     if args.dataset == "trivia_qa":
         train_data = load_trivia_qa_rl(split="train", num_samples=args.num_samples)
-        val_data = load_trivia_qa_rl(
-            split="validation", num_samples=args.num_val_samples
-        )
+        val_data = load_trivia_qa_rl(split="validation", num_samples=args.num_val_samples)
         prompt = DIRECT_QA_PROMPT
     elif args.dataset == "fictional_qa":
         train_data = load_fictional_qa_rl(split="train", num_samples=args.num_samples)
-        val_data = load_fictional_qa_rl(split="train", num_samples=args.num_val_samples)
+        val_data = load_fictional_qa_rl(split="validation", num_samples=args.num_val_samples)
         prompt = DIRECT_QA_PROMPT
     elif args.dataset == "boolq":
         train_data = load_boolq_rl(split="train", num_samples=args.num_samples)
@@ -253,9 +246,7 @@ def main(args):
         torch_dtype="auto",
     )
     model.train()
-    logger.info(
-        f"[+] Model loaded. Parameters: {sum(p.numel() for p in model.parameters()):,}"
-    )
+    logger.info(f"[+] Model loaded. Parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     # Setup optimizer
     optimizer = AdamW(
@@ -365,10 +356,7 @@ def main(args):
                             run.log(val_metrics, step=global_step)
 
                         # Save best model
-                        if (
-                            val_metrics["val/loss"] < best_val_loss
-                            and checkpoint_dir is not None
-                        ):
+                        if val_metrics["val/loss"] < best_val_loss and checkpoint_dir is not None:
                             best_val_loss = val_metrics["val/loss"]
                             save_path = os.path.join(checkpoint_dir, "best")
                             unwrapped_model = accelerator.unwrap_model(model)
