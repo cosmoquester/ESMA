@@ -1,3 +1,5 @@
+import random
+
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer
@@ -67,6 +69,46 @@ class RLDataset(Dataset):
             )
             example["meta_input_ids"] = meta_tokens["input_ids"].squeeze(0)
             example["meta_attention_mask"] = meta_tokens["attention_mask"].squeeze(0)
+        return example
+
+
+class SFTDataset(Dataset):
+    def __init__(
+        self,
+        dataset: Dataset,
+        tokenizer: PreTrainedTokenizer,
+        max_length: int = 512,
+        prompt: str = DIRECT_QA_PROMPT,
+        seed: int = 42,
+    ):
+        self.dataset = dataset
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.prompt = prompt
+        self.random = random.Random(seed)
+
+    def __len__(self) -> int:
+        return len(self.dataset)
+
+    def __getitem__(self, idx: int) -> dict:
+        item = self.dataset[idx]
+
+        examples = [
+            {
+                "role": "user",
+                "content": self.prompt.format(question=item["question"]),
+            },
+            {
+                "role": "assistant",
+                "content": self.random.choice(item["answers"]),
+            },
+        ]
+        examples = self.tokenizer.apply_chat_template(examples, tokenize=False, add_generation_prompt=True)
+        tokens = self.tokenizer(examples, return_tensors="pt", truncation=True, max_length=self.max_length)
+        example = {
+            "input_ids": tokens["input_ids"].squeeze(0),
+            "attention_mask": tokens["attention_mask"].squeeze(0),
+        }
         return example
 
 
