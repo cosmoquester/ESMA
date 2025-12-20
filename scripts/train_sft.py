@@ -12,7 +12,6 @@ import torch
 import wandb
 from accelerate import Accelerator
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import (
@@ -31,7 +30,7 @@ parser = argparse.ArgumentParser(description="SFT Training for Language Models")
 parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace Model ID")
 
 g = parser.add_argument_group("Data")
-g.add_argument("--dataset", type=str, default="trivia_qa", choices=["fictional_qa", "fictional_qa", "boolq"])
+g.add_argument("--dataset", type=str, default="trivia_qa", choices=["trivia_qa", "fictional_qa", "boolq"])
 g.add_argument("--max-length", type=int, default=256, help="Maximum sequence length")
 g.add_argument("--num-samples", type=int, help="Number of training samples to load")
 g.add_argument("--num-val-samples", type=int, help="Number of validation samples to load")
@@ -44,7 +43,6 @@ g.add_argument("--learning-rate", "-lr", type=float, default=2e-5, help="Learnin
 g.add_argument("--weight-decay", type=float, default=0.01, help="Weight decay")
 g.add_argument("--warmup-ratio", type=float, default=0.1, help="Warmup ratio")
 g.add_argument("--max-grad-norm", type=float, default=1.0, help="Max gradient norm for clipping")
-g.add_argument("--scheduler", type=str, default="cosine", choices=["cosine", "linear"], help="LR scheduler")
 
 g = parser.add_argument_group("Experiment Settings")
 g.add_argument("--num-workers", type=int, default=4, help="Number of data loader workers")
@@ -68,6 +66,7 @@ def evaluate(
     model.eval()
     total_loss = 0.0
     total_tokens = 0
+    total_correct = 0
 
     with torch.no_grad():
         for batch in val_loader:
@@ -77,22 +76,36 @@ def evaluate(
                 labels=batch["labels"],
             )
             # Count non-padding tokens
-            num_tokens = (batch["labels"] != -100).sum().item()
+            labels = batch["labels"]
+            valid_mask = labels != -100
+            num_tokens = valid_mask.sum().item()
             total_loss += outputs.loss.item() * num_tokens
             total_tokens += num_tokens
+
+            # Token-level accuracy
+            predictions = outputs.logits.argmax(dim=-1)
+            # Shift predictions to align with labels (causal LM)
+            shift_predictions = predictions[:, :-1]
+            shift_labels = labels[:, 1:]
+            shift_mask = shift_labels != -100
+            correct = ((shift_predictions == shift_labels) & shift_mask).sum().item()
+            total_correct += correct
 
     # Gather across processes
     total_loss_tensor = torch.tensor([total_loss], device=accelerator.device)
     total_tokens_tensor = torch.tensor([total_tokens], device=accelerator.device)
+    total_correct_tensor = torch.tensor([total_correct], device=accelerator.device)
 
     gathered_loss = accelerator.gather(total_loss_tensor).sum().item()
     gathered_tokens = accelerator.gather(total_tokens_tensor).sum().item()
+    gathered_correct = accelerator.gather(total_correct_tensor).sum().item()
 
     avg_loss = gathered_loss / gathered_tokens if gathered_tokens > 0 else 0.0
     perplexity = torch.exp(torch.tensor(avg_loss)).item()
+    accuracy = gathered_correct / gathered_tokens if gathered_tokens > 0 else 0.0
 
     model.train()
-    return {"val/loss": avg_loss, "val/perplexity": perplexity}
+    return {"val/loss": avg_loss, "val/perplexity": perplexity, "val/accuracy": accuracy}
 
 
 def main(args):
@@ -227,14 +240,11 @@ def main(args):
     logger.info(f"[+] Warmup steps: {warmup_steps}")
 
     # Setup scheduler
-    if args.scheduler == "cosine":
-        scheduler = CosineAnnealingLR(optimizer, T_max=total_training_steps, eta_min=0)
-    else:
-        scheduler = get_linear_schedule_with_warmup(
-            optimizer,
-            num_warmup_steps=warmup_steps,
-            num_training_steps=total_training_steps,
-        )
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer,
+        num_warmup_steps=warmup_steps,
+        num_training_steps=total_training_steps,
+    )
 
     # Prepare with accelerator
     model, optimizer, train_loader, val_loader, scheduler = accelerator.prepare(
@@ -250,6 +260,8 @@ def main(args):
         logger.info(f"[+] Epoch {epoch}/{args.epochs}")
 
         epoch_loss = 0.0
+        epoch_correct = 0
+        epoch_tokens = 0
         epoch_steps = 0
 
         progress_bar = tqdm(
@@ -279,17 +291,29 @@ def main(args):
             epoch_loss += loss.item()
             epoch_steps += 1
 
+            # Token-level accuracy for training
+            with torch.no_grad():
+                labels = batch["labels"]
+                predictions = outputs.logits.argmax(dim=-1)
+                shift_predictions = predictions[:, :-1]
+                shift_labels = labels[:, 1:]
+                shift_mask = shift_labels != -100
+                epoch_correct += ((shift_predictions == shift_labels) & shift_mask).sum().item()
+                epoch_tokens += shift_mask.sum().item()
+
             if accelerator.sync_gradients:
                 global_step += 1
 
                 # Logging
                 if global_step % args.logging_steps == 0:
                     avg_loss = epoch_loss / epoch_steps
+                    train_accuracy = epoch_correct / epoch_tokens if epoch_tokens > 0 else 0.0
                     current_lr = scheduler.get_last_lr()[0]
 
                     progress_bar.set_postfix(
                         {
                             "loss": f"{avg_loss:.4f}",
+                            "acc": f"{train_accuracy:.4f}",
                             "lr": f"{current_lr:.2e}",
                         }
                     )
@@ -298,6 +322,7 @@ def main(args):
                         run.log(
                             {
                                 "train/loss": loss.item(),
+                                "train/accuracy": train_accuracy,
                                 "train/learning_rate": current_lr,
                                 "train/epoch": epoch,
                             },
@@ -312,7 +337,8 @@ def main(args):
                         logger.info(
                             f"[+] Step {global_step}: "
                             f"val_loss={val_metrics['val/loss']:.4f}, "
-                            f"val_ppl={val_metrics['val/perplexity']:.2f}"
+                            f"val_ppl={val_metrics['val/perplexity']:.2f}, "
+                            f"val_acc={val_metrics['val/accuracy']:.4f}"
                         )
 
                         if run is not None:
@@ -340,18 +366,22 @@ def main(args):
         val_metrics = evaluate(model, val_loader, accelerator)
         avg_epoch_loss = epoch_loss / epoch_steps
 
+        train_accuracy = epoch_correct / epoch_tokens if epoch_tokens > 0 else 0.0
         if accelerator.is_main_process:
             logger.info(
                 f"[+] Epoch {epoch} complete: "
                 f"train_loss={avg_epoch_loss:.4f}, "
+                f"train_acc={train_accuracy:.4f}, "
                 f"val_loss={val_metrics['val/loss']:.4f}, "
-                f"val_ppl={val_metrics['val/perplexity']:.2f}"
+                f"val_ppl={val_metrics['val/perplexity']:.2f}, "
+                f"val_acc={val_metrics['val/accuracy']:.4f}"
             )
 
             if run is not None:
                 run.log(
                     {
                         "epoch/train_loss": avg_epoch_loss,
+                        "epoch/train_accuracy": train_accuracy,
                         **val_metrics,
                     },
                     step=global_step,
@@ -371,7 +401,8 @@ def main(args):
         logger.info(
             f"[+] Training complete! "
             f"Final val_loss={val_metrics['val/loss']:.4f}, "
-            f"val_ppl={val_metrics['val/perplexity']:.2f}"
+            f"val_ppl={val_metrics['val/perplexity']:.2f}, "
+            f"val_acc={val_metrics['val/accuracy']:.4f}"
         )
 
     if run is not None:
