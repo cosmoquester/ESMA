@@ -49,7 +49,7 @@ g.add_argument("--num-workers", type=int, default=4, help="Number of data loader
 g.add_argument("--seed", type=int, default=42, help="Random seed")
 g.add_argument("--output-dir", type=str, help="Output directory")
 g.add_argument("--save-steps", type=int, default=500, help="Save checkpoint every N steps")
-g.add_argument("--eval-steps", type=int, default=100, help="Evaluate every N steps")
+g.add_argument("--eval-steps", type=int, default=500, help="Evaluate every N steps")
 g.add_argument("--logging-steps", type=int, default=10, help="Log every N steps")
 g.add_argument("--wandb-run-name", type=str, help="Wandb run name")
 g.add_argument("--wandb-project", type=str, default="meta-cognition-sft", help="Wandb project")

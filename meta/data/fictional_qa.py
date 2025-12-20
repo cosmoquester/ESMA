@@ -52,5 +52,7 @@ def load_fictional_qa_rl(
         return train_data
     elif split == "validation":
         return val_data
+    elif split == "all":
+        return dataset
     else:
         raise ValueError(f"Invalid split: {split}")
