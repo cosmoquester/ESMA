@@ -3,7 +3,7 @@ import os
 from datasets import Dataset, load_dataset
 
 
-def load_fictional_qa(split: str = "train", num_samples: int | None = None) -> Dataset:
+def load_fictional_qa(num_samples: int | None = None) -> Dataset:
     """Load FictionalQA dataset.
 
     Args:
@@ -24,7 +24,7 @@ def load_fictional_qa(split: str = "train", num_samples: int | None = None) -> D
                     - value: Value (string)
                     - type: Type of the answer
     """
-    dataset = load_dataset("tomg-group-umd/fictionalqa", "fict_qa", split=split)
+    dataset = load_dataset("tomg-group-umd/fictionalqa", "fict_qa", split="train")
     if num_samples is not None:
         dataset = dataset.select(range(min(len(dataset), num_samples)))
     return dataset
@@ -35,9 +35,8 @@ def load_fictional_qa_rl(
 ) -> Dataset:
     if num_proc is None:
         num_proc = os.cpu_count() or 1
-    dataset = load_fictional_qa(split, num_samples)
-    dataset = dataset.train_test_split(test_size=0.1, seed=seed, shuffle=True)
-    dataset["train"] = dataset["train"].map(
+    dataset = load_fictional_qa(num_samples)
+    dataset = dataset.map(
         lambda x: {
             "question_id": x["question_id"],
             "question": x["question"],
@@ -46,12 +45,12 @@ def load_fictional_qa_rl(
         num_proc=num_proc,
         remove_columns=dataset.column_names,
     )
-    train_data, val_data = dataset.train_test_split(test_size=0.5, seed=seed, shuffle=True)
+    split_dataset = dataset.train_test_split(test_size=0.5, seed=seed, shuffle=True)
 
     if split == "train":
-        return train_data
+        return split_dataset["train"]
     elif split == "validation":
-        return val_data
+        return split_dataset["test"]
     elif split == "all":
         return dataset
     else:
