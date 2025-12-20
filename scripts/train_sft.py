@@ -30,7 +30,7 @@ parser = argparse.ArgumentParser(description="SFT Training for Language Models")
 parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace Model ID")
 
 g = parser.add_argument_group("Data")
-g.add_argument("--dataset", type=str, default="trivia_qa", choices=["trivia_qa", "fictional_qa", "boolq"])
+g.add_argument("--dataset", type=str, default="fictional_qa", choices=["trivia_qa", "fictional_qa", "boolq"])
 g.add_argument("--max-length", type=int, default=256, help="Maximum sequence length")
 g.add_argument("--num-samples", type=int, help="Number of training samples to load")
 g.add_argument("--num-val-samples", type=int, help="Number of validation samples to load")
@@ -38,7 +38,7 @@ g.add_argument("--num-val-samples", type=int, help="Number of validation samples
 g = parser.add_argument_group("Training")
 g.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
 g.add_argument("--batch-size", type=int, default=8, help="Per-device batch size")
-g.add_argument("--gradient-accumulation-steps", type=int, default=4, help="Gradient accumulation steps")
+g.add_argument("--accumulation", type=int, default=4, help="Gradient accumulation steps")
 g.add_argument("--learning-rate", "-lr", type=float, default=2e-5, help="Learning rate")
 g.add_argument("--weight-decay", type=float, default=0.01, help="Weight decay")
 g.add_argument("--warmup-ratio", type=float, default=0.1, help="Warmup ratio")
@@ -113,7 +113,7 @@ def main(args):
 
     # Initialize accelerator
     accelerator = Accelerator(
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        gradient_accumulation_steps=args.accumulation,
         log_with="wandb" if args.wandb_run_name else None,
     )
 
@@ -122,7 +122,7 @@ def main(args):
 
     logger.info(f"[+] Accelerator device: {accelerator.device}")
     logger.info(f"[+] Num processes: {accelerator.num_processes}")
-    logger.info(f"[+] Gradient accumulation steps: {args.gradient_accumulation_steps}")
+    logger.info(f"[+] Gradient accumulation steps: {args.accumulation}")
 
     # Setup output directory
     if args.output_dir is not None and args.wandb_run_name is None:
@@ -232,7 +232,7 @@ def main(args):
     )
 
     # Calculate total training steps
-    num_update_steps_per_epoch = len(train_loader) // args.gradient_accumulation_steps
+    num_update_steps_per_epoch = len(train_loader) // args.accumulation
     total_training_steps = num_update_steps_per_epoch * args.epochs
     warmup_steps = int(total_training_steps * args.warmup_ratio)
 
