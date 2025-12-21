@@ -40,7 +40,7 @@ g.add_argument("--epochs", type=int, default=10, help="Number of training epochs
 g.add_argument("--batch-size", type=int, default=8, help="Per-device batch size")
 g.add_argument("--accumulation", type=int, default=4, help="Gradient accumulation steps")
 g.add_argument("--learning-rate", "-lr", type=float, default=2e-5, help="Learning rate")
-g.add_argument("--weight-decay", type=float, default=0.01, help="Weight decay")
+g.add_argument("--weight-decay", type=float, default=0.0, help="Weight decay")
 g.add_argument("--warmup-ratio", type=float, default=0.1, help="Warmup ratio")
 g.add_argument("--max-grad-norm", type=float, default=1.0, help="Max gradient norm for clipping")
 
