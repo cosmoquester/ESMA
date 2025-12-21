@@ -24,7 +24,9 @@ def load_fictional_qa(num_samples: int | None = None) -> Dataset:
                     - value: Value (string)
                     - type: Type of the answer
     """
-    dataset = load_dataset("tomg-group-umd/fictionalqa", "fict_qa", split="train")
+    dataset = load_dataset("tomg-group-umd/fictionalqa", "fict_qa", split="train").filter(
+        lambda x: x["duplicate_relationship"] is None
+    )
     if num_samples is not None:
         dataset = dataset.select(range(min(len(dataset), num_samples)))
     return dataset
