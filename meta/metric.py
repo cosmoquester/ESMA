@@ -1,3 +1,6 @@
+import numpy as np
+from scipy.stats import norm
+
 IGNORE_VALUE = -100
 
 
@@ -31,6 +34,20 @@ def meta_wrong_no(correctness: list[int], yes: list[int], keep_length: bool = Fa
 
 def meta_alignment(correctness: list[int], yes: list[int]) -> list[int]:
     return [int(correct == yes) for correct, yes in zip(correctness, yes)]
+
+
+def type2_d_prime(direct_correctness: list[int], meta_yes: list[int]) -> float:
+    hit = [meta_yes[i] for i in range(len(direct_correctness)) if direct_correctness[i] == 1]
+    false_alarm = [meta_yes[i] for i in range(len(direct_correctness)) if direct_correctness[i] == 0]
+
+    hit_rate = np.mean(hit)
+    false_alarm_rate = np.mean(false_alarm)
+
+    hit_rate = np.clip(hit_rate, 1e-4, 1 - 1e-4)
+    false_alarm_rate = np.clip(false_alarm_rate, 1e-4, 1 - 1e-4)
+
+    d_prime_type2 = norm.ppf(hit_rate) - norm.ppf(false_alarm_rate)
+    return float(d_prime_type2)
 
 
 def meta_metrics(
