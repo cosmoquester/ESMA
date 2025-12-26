@@ -170,7 +170,6 @@ def main(args):
     logger.info(f"[+] Results saved to: {args.output_path}")
     logger.info(f"[+] Exact match accuracy: {sum(all_direct_correctness) / len(all_direct_correctness):.2%}")
     logger.info(f"[+] Yes rate: {sum(all_yes) / len(all_yes):.2%}")
-    logger.info(f"[+] Meta alignments: {sum(all_meta_alignments) / len(all_meta_alignments):.2%}")
 
     all_yes_failures = [v for v in all_yes_failures if v != IGNORE_VALUE]
     all_no_failures = [v for v in all_no_failures if v != IGNORE_VALUE]
@@ -182,6 +181,7 @@ def main(args):
         logger.info(f"[+] No failures rate: {sum(all_no_failures) / len(all_no_failures):.2%}")
     else:
         logger.info("[-] All meta answers are Yes")
+    logger.info(f"[+] Meta alignments: {sum(all_meta_alignments) / len(all_meta_alignments):.2%}")
 
 
 if __name__ == "__main__":
