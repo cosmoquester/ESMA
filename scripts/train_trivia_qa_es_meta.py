@@ -14,7 +14,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from meta.data import load_trivia_qa_rl
 from meta.dataset import RLDataset, pad_collate_fn, simple_collate_fn
 from meta.evolution import apply_evolution
-from meta.metric import IGNORE_VALUE, meta_metrics
+from meta.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
 from meta.reward import REWARD_TYPE_TO_FUNCTION
 from meta.utils import get_logger, seed_everything
 
@@ -103,6 +103,9 @@ def evaluate_model(
         "yes_failures": torch.tensor(all_yes_failures, dtype=torch.float32, device=model.device),
         "no_failures": torch.tensor(all_no_failures, dtype=torch.float32, device=model.device),
         "meta_alignments": torch.tensor(all_meta_alignments, dtype=torch.float32, device=model.device),
+        "d_prime_type2": torch.tensor(
+            type2_d_prime(all_direct_correctness, all_yes), dtype=torch.float32, device=model.device
+        ),
     }
 
 
@@ -175,6 +178,9 @@ def single_iteration(
         "yes_failures": torch.tensor(all_yes_failures, dtype=torch.float32, device=accelerator.device),
         "no_failures": torch.tensor(all_no_failures, dtype=torch.float32, device=accelerator.device),
         "meta_alignments": torch.tensor(all_meta_alignments, dtype=torch.float32, device=accelerator.device),
+        "d_prime_type2": torch.tensor(
+            type2_d_prime(all_direct_correctness, all_yes), dtype=torch.float32, device=accelerator.device
+        ),
     }
 
 

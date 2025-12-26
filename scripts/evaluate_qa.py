@@ -8,7 +8,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from meta.data import load_boolq_rl, load_fictional_qa_rl, load_trivia_qa_rl
 from meta.dataset import RLDataset, pad_collate_fn
-from meta.metric import IGNORE_VALUE, meta_metrics
+from meta.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
 from meta.prompt import BOOLQ_PROMPT, DIRECT_QA_PROMPT
 from meta.utils import get_logger, seed_everything
 
@@ -182,6 +182,7 @@ def main(args):
     else:
         logger.info("[-] All meta answers are Yes")
     logger.info(f"[+] Meta alignments: {sum(all_meta_alignments) / len(all_meta_alignments):.2%}")
+    logger.info(f"[+] Type 2 d-prime: {type2_d_prime(all_direct_correctness, all_yes):.2f}")
 
 
 if __name__ == "__main__":

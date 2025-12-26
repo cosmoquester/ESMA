@@ -1,3 +1,6 @@
+from .metric import type2_d_prime
+
+
 def correct_reward(direct_correctness: list[int], meta_yes: list[int]) -> list[int]:
     return direct_correctness.copy()
 
@@ -86,6 +89,10 @@ def multilevel_reward5(direct_correctness: list[int], meta_yes: list[int]) -> li
     return rewards
 
 
+def type2_d_prime_reward(direct_correctness: list[int], meta_yes: list[int]) -> list[float]:
+    return [type2_d_prime(direct_correctness, meta_yes)]
+
+
 REWARD_TYPE_TO_FUNCTION = {
     "correct": correct_reward,
     "alignment": meta_alignment_reward,
@@ -94,4 +101,5 @@ REWARD_TYPE_TO_FUNCTION = {
     "multilevel3": multilevel_reward3,
     "multilevel4": multilevel_reward4,
     "multilevel5": multilevel_reward5,
+    "type2_d_prime": type2_d_prime_reward,
 }
