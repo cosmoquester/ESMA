@@ -1,14 +1,11 @@
 import os
+import random
 
 from datasets import Dataset, load_dataset
 
 
-def load_fictional_qa(num_samples: int | None = None) -> Dataset:
+def load_fictional_qa() -> Dataset:
     """Load FictionalQA dataset.
-
-    Args:
-        split: Split to load (validation, test, train)
-        num_samples: Number of samples to load
 
     Returns:
         Dataset: FictionalQA dataset
@@ -24,12 +21,9 @@ def load_fictional_qa(num_samples: int | None = None) -> Dataset:
                     - value: Value (string)
                     - type: Type of the answer
     """
-    dataset = load_dataset("tomg-group-umd/fictionalqa", "fict_qa", split="train").filter(
+    return load_dataset("tomg-group-umd/fictionalqa", "fict_qa", split="train").filter(
         lambda x: x["duplicate_relationship"] is None
     )
-    if num_samples is not None:
-        dataset = dataset.select(range(min(len(dataset), num_samples)))
-    return dataset
 
 
 def load_fictional_qa_rl(
@@ -37,7 +31,22 @@ def load_fictional_qa_rl(
 ) -> Dataset:
     if num_proc is None:
         num_proc = os.cpu_count() or 1
-    dataset = load_fictional_qa(num_samples)
+    dataset = load_fictional_qa()
+
+    event_ids = sorted(set(dataset["event_id"]))
+    rand = random.Random(seed)
+    rand.shuffle(event_ids)
+
+    if split == "train":
+        event_ids = event_ids[: len(event_ids) // 2]
+    elif split == "validation":
+        event_ids = event_ids[len(event_ids) // 2 :]
+    elif split == "all":
+        pass
+    else:
+        raise ValueError(f"Invalid split: {split}")
+
+    dataset = dataset.filter(lambda x: x["event_id"] in event_ids)
     dataset = dataset.map(
         lambda x: {
             "question_id": x["question_id"],
@@ -47,13 +56,6 @@ def load_fictional_qa_rl(
         num_proc=num_proc,
         remove_columns=dataset.column_names,
     )
-    split_dataset = dataset.train_test_split(test_size=0.5, seed=seed, shuffle=True)
-
-    if split == "train":
-        return split_dataset["train"]
-    elif split == "validation":
-        return split_dataset["test"]
-    elif split == "all":
-        return dataset
-    else:
-        raise ValueError(f"Invalid split: {split}")
+    if num_samples is not None:
+        dataset = dataset.select(range(min(len(dataset), num_samples)))
+    return dataset
