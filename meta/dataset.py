@@ -44,7 +44,9 @@ class RLDataset(Dataset):
             }
         ]
         if self.tokenizer.chat_template is not None:
-            examples = self.tokenizer.apply_chat_template(examples, tokenize=False, add_generation_prompt=True)
+            examples = self.tokenizer.apply_chat_template(
+                examples, tokenize=False, add_generation_prompt=True, enable_thinking=False
+            )
         else:
             examples = [example["content"] for example in examples]
 
