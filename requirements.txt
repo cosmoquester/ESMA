@@ -7,3 +7,4 @@ datasets
 wandb
 accelerate
 scipy
+scikit-learn
