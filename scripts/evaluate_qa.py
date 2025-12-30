@@ -23,7 +23,7 @@ parser.add_argument("--num-samples", type=int, help="Number of samples to evalua
 parser.add_argument("--output-path", type=str, help="Output TSV file path")
 parser.add_argument("--max-input-length", type=int, default=128, help="Maximum length of the input text")
 parser.add_argument("--max-output-length", type=int, default=32, help="Maximum length of the output text")
-parser.add_argument("--num-workers", type=int, default=os.cpu_count() // 2, help="Number of workers")
+parser.add_argument("--num-workers", type=int, default=8, help="Number of workers")
 parser.add_argument("--seed", type=int, default=42, help="Random seed")
 
 
@@ -63,7 +63,7 @@ def main(args):
     logger.info(f"[+] Total samples to evaluate: {len(data)}")
 
     if args.output_path is None:
-        base_model = args.model.split("/")[-1]
+        base_model = args.model.strip("/").split("/")[-1]
         os.makedirs("eval_outputs", exist_ok=True)
         args.output_path = f"eval_outputs/{args.dataset}_{base_model}_{args.split}_{args.num_samples}.tsv"
 

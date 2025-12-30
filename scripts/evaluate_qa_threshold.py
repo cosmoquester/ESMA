@@ -9,19 +9,14 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from meta.data import load_boolq_rl, load_fictional_qa_rl, load_trivia_qa_rl
 from meta.dataset import RLDataset, pad_collate_fn
-from meta.metric import IGNORE_VALUE, meta_metrics
-from meta.prompt import BOOLQ_PROMPT
+from meta.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
+from meta.prompt import BOOLQ_PROMPT, DIRECT_QA_PROMPT
 from meta.utils import get_logger, seed_everything
 
 torch.set_grad_enabled(False)
 
 parser = argparse.ArgumentParser(description="Evaluate LLM on TriviaQA and save to TSV")
-parser.add_argument(
-    "--model",
-    type=str,
-    default="Qwen/Qwen2.5-0.5B-Instruct",
-    help="HuggingFace Model ID",
-)
+parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace Model ID")
 parser.add_argument(
     "--dataset", type=str, default="triviaqa", choices=["triviaqa", "boolq"], help="Dataset to evaluate"
 )
@@ -30,13 +25,8 @@ parser.add_argument("--batch-size", type=int, default=128, help="Batch size for 
 parser.add_argument("--num-samples", type=int, help="Number of samples to evaluate (0 for all)")
 parser.add_argument("--output-path", type=str, help="Output TSV file path")
 parser.add_argument("--max-input-length", type=int, default=128, help="Maximum length of the input text")
-parser.add_argument(
-    "--max-output-length",
-    type=int,
-    default=32,
-    help="Maximum length of the output text",
-)
-parser.add_argument("--num-workers", type=int, default=os.cpu_count() // 2, help="Number of workers")
+parser.add_argument("--max-output-length", type=int, default=32, help="Maximum length of the output text")
+parser.add_argument("--num-workers", type=int, default=8, help="Number of workers")
 parser.add_argument("--seed", type=int, default=42, help="Random seed")
 
 
@@ -82,7 +72,7 @@ def main(args):
     logger.info(f"[+] Total samples to evaluate: {len(data)}")
 
     if args.output_path is None:
-        base_model = args.model.split("/")[-1]
+        base_model = args.model.strip("/").split("/")[-1]
         os.makedirs("eval_outputs", exist_ok=True)
         args.output_path = f"eval_outputs/{args.dataset}_{base_model}_{args.split}_{args.num_samples}_threshold.tsv"
 
@@ -112,7 +102,11 @@ def main(args):
         meta_input_ids = batch["meta_input_ids"].to(model.device)
         meta_attention_mask = batch["meta_attention_mask"].to(model.device)
 
-        model_outputs = model(input_ids=meta_input_ids, attention_mask=meta_attention_mask, logits_to_keep=1)
+        model_outputs = model(
+            input_ids=meta_input_ids,
+            attention_mask=meta_attention_mask,
+            logits_to_keep=1,
+        )
         last_token_logits = model_outputs.logits[:, -1, :]
         yes_logits = last_token_logits[:, yes_token_id]
         no_logits = last_token_logits[:, no_token_id]
@@ -174,6 +168,7 @@ def main(args):
                 "no_failures",
                 "meta_alignments",
                 "yes_over_no",
+                "confidence",
                 "best_meta_answer",
                 "best_yes",
                 "best_yes_failures",
@@ -229,6 +224,7 @@ def main(args):
                     no_failures,
                     meta_alignments,
                     yes_over_no,
+                    1 - (1 / (yes_over_no + 1)),
                     _best_meta_answer,
                     _best_yes,
                     best_yes_failure,
@@ -240,6 +236,7 @@ def main(args):
     logger.info(f"[+] Exact match accuracy: {sum(all_direct_correctness) / len(all_direct_correctness):.2%}")
     logger.info(f"[+] Yes rate: {sum(all_yes) / len(all_yes):.2%}")
     logger.info(f"[+] Meta alignments: {sum(all_meta_alignments) / len(all_meta_alignments):.2%}")
+    logger.info(f"[+] Type 2 d-prime: {type2_d_prime(all_direct_correctness, all_yes):.2f}")
 
     all_yes_failures = [v for v in all_yes_failures if v != IGNORE_VALUE]
     all_no_failures = [v for v in all_no_failures if v != IGNORE_VALUE]
@@ -265,6 +262,7 @@ def main(args):
     logger.info(f"[+] Best meta alignments: {sum(best_meta_alignments) / len(best_meta_alignments):.2%}")
     logger.info(f"[+] Best yes rate: {sum(best_yes) / len(best_yes):.2%}")
     logger.info(f"[+] Best meta alignments: {sum(best_meta_alignments) / len(best_meta_alignments):.2%}")
+    logger.info(f"[+] Best type 2 d-prime: {type2_d_prime(all_direct_correctness, best_yes):.2f}")
 
 
 if __name__ == "__main__":

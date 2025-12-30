@@ -14,6 +14,6 @@ BOOLQ_PROMPT = """Answer the following question with "true" or "false".
 Question: {question}
 """
 
-BOOLQ_PROMPT_WITH_IDW = """Answer the following question with "true" or "false". If you don't know the answer, just return "I don't know".
+BOOLQ_WITH_IDW_PROMPT = """Answer the following question with "true" or "false". If you don't know the answer, just return "I don't know".
 Question: {question}
 """

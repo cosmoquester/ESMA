@@ -9,7 +9,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from meta.data import load_boolq_rl, load_fictional_qa_rl, load_trivia_qa_rl
 from meta.dataset import RLDataset, pad_collate_fn
 from meta.metric import IGNORE_VALUE, meta_metrics
-from meta.prompt import BOOLQ_PROMPT_WITH_IDW, DIRECT_QA_PROMPT
+from meta.prompt import BOOLQ_WITH_IDW_PROMPT, DIRECT_QA_WITH_IDW_PROMPT
 from meta.utils import get_logger, seed_everything
 
 parser = argparse.ArgumentParser(description="Evaluate LLM on TriviaQA and save to TSV")
@@ -23,7 +23,7 @@ parser.add_argument("--num-samples", type=int, help="Number of samples to evalua
 parser.add_argument("--output-path", type=str, help="Output TSV file path")
 parser.add_argument("--max-input-length", type=int, default=128, help="Maximum length of the input text")
 parser.add_argument("--max-output-length", type=int, default=32, help="Maximum length of the output text")
-parser.add_argument("--num-workers", type=int, default=os.cpu_count() // 2, help="Number of workers")
+parser.add_argument("--num-workers", type=int, default=8, help="Number of workers")
 parser.add_argument("--seed", type=int, default=42, help="Random seed")
 
 
@@ -45,15 +45,15 @@ def main(args):
     if args.dataset == "triviaqa":
         logger.info("[+] Loading TriviaQA dataset...")
         data = load_trivia_qa_rl(split=args.split, num_samples=args.num_samples)
-        prompt = DIRECT_QA_PROMPT
+        prompt = DIRECT_QA_WITH_IDW_PROMPT
     elif args.dataset == "boolq":
         logger.info("[+] Loading BoolQ dataset...")
         data = load_boolq_rl(split=args.split, num_samples=args.num_samples)
-        prompt = BOOLQ_PROMPT_WITH_IDW
+        prompt = BOOLQ_WITH_IDW_PROMPT
     elif args.dataset == "fictionalqa":
         logger.info("[+] Loading FictionalQA dataset...")
         data = load_fictional_qa_rl(split=args.split, num_samples=args.num_samples)
-        prompt = DIRECT_QA_PROMPT
+        prompt = DIRECT_QA_WITH_IDW_PROMPT
     else:
         raise ValueError(f"Invalid dataset: {args.dataset}")
     dataset = RLDataset(data, tokenizer, max_length=args.max_input_length, prompt=prompt)
@@ -63,7 +63,7 @@ def main(args):
     logger.info(f"[+] Total samples to evaluate: {len(data)}")
 
     if args.output_path is None:
-        base_model = args.model.split("/")[-1]
+        base_model = args.model.strip("/").split("/")[-1]
         os.makedirs("eval_outputs", exist_ok=True)
         args.output_path = f"eval_outputs/{args.dataset}_{base_model}_{args.split}_{args.num_samples}_idw.tsv"
 
