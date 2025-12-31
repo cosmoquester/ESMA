@@ -28,3 +28,6 @@ dist/
 outputs/
 eval_outputs/
 wandb/
+
+# weight change
+*.pkl
