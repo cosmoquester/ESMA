@@ -9,11 +9,3 @@ Question: {question}
 DIRECT_QA_WITH_IDW_PROMPT = """Answer the following question with keywords. If you don't know the answer, just return "I don't know".
 Question: {question}
 """
-
-BOOLQ_PROMPT = """Answer the following question with "true" or "false".
-Question: {question}
-"""
-
-BOOLQ_WITH_IDW_PROMPT = """Answer the following question with "true" or "false". If you don't know the answer, just return "I don't know".
-Question: {question}
-"""

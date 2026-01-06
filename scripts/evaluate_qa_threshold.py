@@ -7,10 +7,10 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from meta.data import load_boolq_rl, load_fictional_qa_rl, load_trivia_qa_rl
+from meta.data import load_fictional_qa_rl, load_trivia_qa_rl
 from meta.dataset import RLDataset, pad_collate_fn
 from meta.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
-from meta.prompt import BOOLQ_PROMPT, DIRECT_QA_PROMPT
+from meta.prompt import DIRECT_QA_PROMPT
 from meta.utils import get_logger, seed_everything
 
 torch.set_grad_enabled(False)
@@ -18,7 +18,7 @@ torch.set_grad_enabled(False)
 parser = argparse.ArgumentParser(description="Evaluate LLM on TriviaQA and save to TSV")
 parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace Model ID")
 parser.add_argument(
-    "--dataset", type=str, default="triviaqa", choices=["triviaqa", "boolq"], help="Dataset to evaluate"
+    "--dataset", type=str, default="triviaqa", choices=["triviaqa", "fictionalqa"], help="Dataset to evaluate"
 )
 parser.add_argument("--split", type=str, default="validation", help="Split to evaluate")
 parser.add_argument("--batch-size", type=int, default=128, help="Batch size for inference")
@@ -51,10 +51,6 @@ def main(args):
         logger.info("[+] Loading TriviaQA dataset...")
         data = load_trivia_qa_rl(split=args.split, num_samples=args.num_samples)
         prompt = DIRECT_QA_PROMPT
-    elif args.dataset == "boolq":
-        logger.info("[+] Loading BoolQ dataset...")
-        data = load_boolq_rl(split=args.split, num_samples=args.num_samples)
-        prompt = BOOLQ_PROMPT
     elif args.dataset == "fictionalqa":
         logger.info("[+] Loading FictionalQA dataset...")
         data = load_fictional_qa_rl(split=args.split, num_samples=args.num_samples)
