@@ -27,7 +27,7 @@ def meta_yes_cn(meta_outputs: list[str]) -> list[int]:
 
 
 def meta_yes_es(meta_outputs: list[str]) -> list[int]:
-    return [1 if "Sí" in output.lower() else 0 for output in meta_outputs]
+    return [1 if "sí" in output.lower() else 0 for output in meta_outputs]
 
 
 def meta_wrong_yes(correctness: list[int], yes: list[int], keep_length: bool = False) -> list[int]:
