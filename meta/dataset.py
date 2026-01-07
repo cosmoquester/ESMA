@@ -5,7 +5,7 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer
 
-from .prompt import DIRECT_QA_PROMPT, META_QA_PROMPT
+from .prompt import DIRECT_QA_PROMPT
 
 
 class RLDataset(Dataset):
@@ -14,8 +14,8 @@ class RLDataset(Dataset):
         dataset: Dataset,
         tokenizer: PreTrainedTokenizer,
         max_length: int = 512,
-        use_meta: bool = False,
         prompt: str = DIRECT_QA_PROMPT,
+        meta_prompt: str | None = None,
     ):
         """Initialize RL dataset.
 
@@ -30,7 +30,7 @@ class RLDataset(Dataset):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.prompt = prompt
-        self.meta_prompt = META_QA_PROMPT if use_meta else None
+        self.meta_prompt = meta_prompt
 
     def __len__(self) -> int:
         return len(self.dataset)

@@ -18,6 +18,18 @@ def meta_yes(meta_outputs: list[str]) -> list[int]:
     return [1 if "yes" in output.lower() else 0 for output in meta_outputs]
 
 
+def meta_yes_ko(meta_outputs: list[str]) -> list[int]:
+    return [1 if "예" in output.lower() else 0 for output in meta_outputs]
+
+
+def meta_yes_cn(meta_outputs: list[str]) -> list[int]:
+    return [1 if "是" in output.lower() else 0 for output in meta_outputs]
+
+
+def meta_yes_es(meta_outputs: list[str]) -> list[int]:
+    return [1 if "Sí" in output.lower() else 0 for output in meta_outputs]
+
+
 def meta_wrong_yes(correctness: list[int], yes: list[int], keep_length: bool = False) -> list[int]:
     if not keep_length:
         return [1 - correct for correct, yes in zip(correctness, yes) if yes == 1]
@@ -79,10 +91,21 @@ def relative_meta_information(correctness: list[int], yes: list[int]) -> float:
 
 
 def meta_metrics(
-    direct_outputs: list[str], meta_outputs: list[str], answer_lists: list[list[str]], keep_length: bool = False
+    direct_outputs: list[str],
+    meta_outputs: list[str],
+    answer_lists: list[list[str]],
+    keep_length: bool = False,
+    lang: str = "en",
 ) -> tuple[list[int], list[int], list[int], list[int], list[int]]:
     direct_correctness = correctness_by_inclusion(direct_outputs, answer_lists)
-    yes = meta_yes(meta_outputs)
+    if lang == "ko":
+        yes = meta_yes_ko(meta_outputs)
+    elif lang.startswith("zh"):
+        yes = meta_yes_cn(meta_outputs)
+    elif lang == "es":
+        yes = meta_yes_es(meta_outputs)
+    else:
+        yes = meta_yes(meta_outputs)
     yes_failures = meta_wrong_yes(direct_correctness, yes, keep_length)
     no_failures = meta_wrong_no(direct_correctness, yes, keep_length)
     meta_alignments = meta_alignment(direct_correctness, yes)
