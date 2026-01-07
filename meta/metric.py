@@ -50,6 +50,34 @@ def type2_d_prime(direct_correctness: list[int], meta_yes: list[int]) -> float:
     return float(d_prime_type2)
 
 
+def relative_meta_information(correctness: list[int], yes: list[int]) -> float:
+    correctness = np.array(correctness)
+    yes = np.array(yes)
+    N = correctness.shape[0]
+
+    p_acc = np.mean(correctness)
+    if p_acc == 0 or p_acc == 1:
+        return 0.0
+
+    h_acc = -(p_acc * np.log2(p_acc) + (1 - p_acc) * np.log2(1 - p_acc))
+
+    counts = np.zeros((2, 2))
+    for a, c in zip(correctness, yes):
+        counts[a, c] += 1
+
+    p_joint = counts / N
+    p_acc_marginal = np.sum(p_joint, axis=1)
+    p_conf_marginal = np.sum(p_joint, axis=0)
+
+    mi = 0
+    for i in range(2):
+        for j in range(2):
+            if p_joint[i, j] > 0:
+                mi += p_joint[i, j] * np.log2(p_joint[i, j] / (p_acc_marginal[i] * p_conf_marginal[j]))
+
+    return float(mi / h_acc)
+
+
 def meta_metrics(
     direct_outputs: list[str], meta_outputs: list[str], answer_lists: list[list[str]], keep_length: bool = False
 ) -> tuple[list[int], list[int], list[int], list[int], list[int]]:
