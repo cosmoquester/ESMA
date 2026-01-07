@@ -15,6 +15,7 @@ from meta.data import load_trivia_qa_rl
 from meta.dataset import RLDataset, pad_collate_fn, simple_collate_fn
 from meta.evolution import apply_evolution
 from meta.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
+from meta.prompt import META_QA_PROMPT
 from meta.reward import REWARD_TYPE_TO_FUNCTION
 from meta.utils import get_logger, seed_everything
 
@@ -232,13 +233,13 @@ def main(args):
         train_data,
         tokenizer,
         max_length=args.max_input_length,
-        use_meta=True,
+        meta_prompt=META_QA_PROMPT,
     )
     val_dataset = RLDataset(
         val_data,
         tokenizer,
         max_length=args.max_input_length,
-        use_meta=True,
+        meta_prompt=META_QA_PROMPT,
     )
     train_loader = DataLoader(
         train_dataset,
