@@ -25,6 +25,8 @@ class RLDataset(Dataset):
                 - answers: List of answer aliases (list of strings)
             tokenizer: Tokenizer to tokenize the questions and answers
             max_length: Maximum length of the input text
+            prompt: Prompt to use for the questions
+            meta_prompt: Prompt to use for the meta questions
         """
         self.dataset = dataset
         self.tokenizer = tokenizer

@@ -328,7 +328,7 @@ def main(args):
         test_data,
         tokenizer,
         max_length=args.max_input_length,
-        use_meta=True,
+        meta_prompt=META_QA_PROMPT,
     )
     test_loader = DataLoader(
         test_dataset,

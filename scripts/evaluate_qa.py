@@ -44,7 +44,7 @@ parser.add_argument(
     ],
     help="Dataset to evaluate",
 )
-parser.add_argument("--lang", type=str, default="en", help="Language to evaluate")
+parser.add_argument("--lang", type=str, default="en", help="Language to evaluate for MKQA")
 parser.add_argument("--split", type=str, default="validation", help="Split to evaluate")
 parser.add_argument("--batch-size", type=int, default=128, help="Batch size for inference")
 parser.add_argument("--num-samples", type=int, help="Number of samples to evaluate (0 for all)")
@@ -121,7 +121,7 @@ def main(args):
     if args.output_path is None:
         base_model = args.model.strip("/").split("/")[-1]
         os.makedirs("eval_outputs", exist_ok=True)
-        args.output_path = f"eval_outputs/{args.dataset}_{args.lang}_{base_model}_{args.split}_{args.num_samples}.tsv"
+        args.output_path = f"eval_outputs/{args.dataset}_{base_model}_{args.split}_{args.num_samples}.tsv"
 
     all_question_ids = []
     all_questions = []
