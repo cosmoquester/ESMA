@@ -38,7 +38,7 @@ g.add_argument("--num-val-samples", type=int, help="Number of validation samples
 g.add_argument("--max-new-tokens", type=int, default=32, help="Maximum tokens for inference")
 
 g = parser.add_argument_group("Training")
-g.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
+g.add_argument("--epochs", type=int, default=2, help="Number of training epochs")
 g.add_argument("--batch-size", type=int, default=1, help="Per-device batch size")
 g.add_argument("--accumulation", type=int, default=1, help="Gradient accumulation steps")
 g.add_argument("--learning-rate", "-lr", type=float, default=2e-5, help="Learning rate")
@@ -68,7 +68,7 @@ def run_batch_inference(
     """Run inference on a batch of direct questions and return correctness.
 
     Args:
-        model: Model to run inference with
+        model: Model to run inference with (should be unwrapped)
         tokenizer: Tokenizer for decoding
         batch: Batch dict with direct_input_ids, direct_attention_mask, answers
         max_new_tokens: Maximum tokens to generate
@@ -123,10 +123,6 @@ def select_meta_inputs(batch: dict, correctness: list[int], tokenizer: AutoToken
     labels = selected_input_ids.clone()
 
     pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
-    if isinstance(pad_token_id, (list, tuple)):
-        pad_token_id = pad_token_id[0] if pad_token_id else 0
-    pad_token_id = int(pad_token_id) if pad_token_id is not None else 0
-
     # Mask padding tokens (they're at the start due to left padding)
     labels[selected_input_ids == pad_token_id] = -100
 
@@ -150,10 +146,13 @@ def evaluate(
     total_tokens = 0
     total_correct = 0
 
+    # Unwrap model for inference (needed for generate method)
+    unwrapped_model = accelerator.unwrap_model(model)
+
     with torch.no_grad():
         for batch in val_loader:
             # Run inference on direct questions to get correctness
-            correctness = run_batch_inference(model, tokenizer, batch, max_new_tokens)
+            correctness = run_batch_inference(unwrapped_model, tokenizer, batch, max_new_tokens)
 
             # Select meta inputs based on correctness
             training_batch = select_meta_inputs(batch, correctness, tokenizer)
@@ -249,6 +248,7 @@ def main(args):
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
+    tokenizer.padding_side = "left"
 
     # Load dataset
     logger.info(f"[+] Loading {args.dataset} dataset...")
@@ -340,6 +340,9 @@ def main(args):
         model, optimizer, train_loader, val_loader, scheduler
     )
 
+    # Unwrap model for inference (needed for generate method)
+    unwrapped_model = accelerator.unwrap_model(model)
+
     # Training loop
     global_step = 0
     best_val_loss = float("inf")
@@ -361,7 +364,7 @@ def main(args):
 
         for batch in progress_bar:
             # Run inference on direct questions to get correctness
-            correctness = run_batch_inference(model, tokenizer, batch, args.max_new_tokens)
+            correctness = run_batch_inference(unwrapped_model, tokenizer, batch, args.max_new_tokens)
 
             # Select meta inputs based on correctness
             training_batch = select_meta_inputs(batch, correctness, tokenizer)
@@ -457,6 +460,14 @@ def main(args):
                         unwrapped_model.save_pretrained(save_path)
                         tokenizer.save_pretrained(save_path)
                         logger.info(f"[+] Checkpoint saved to {save_path}")
+
+        # Save epoch model
+        if checkpoint_dir is not None and accelerator.is_main_process:
+            save_path = os.path.join(checkpoint_dir, f"epoch_{epoch}")
+            unwrapped_model = accelerator.unwrap_model(model)
+            unwrapped_model.save_pretrained(save_path)
+            tokenizer.save_pretrained(save_path)
+            logger.info(f"[+] Epoch {epoch} model saved to {save_path}")
 
         # End of epoch evaluation
         val_metrics = evaluate(model, tokenizer, val_loader, accelerator, args.max_new_tokens)
