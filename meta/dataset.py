@@ -5,7 +5,7 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer
 
-from .prompt import DIRECT_QA_PROMPT
+from .prompt import DIRECT_QA_PROMPT, META_QA_PROMPT
 
 
 class RLDataset(Dataset):
@@ -148,6 +148,145 @@ class SFTDataset(Dataset):
             "input_ids": torch.stack(padded_input_ids),
             "attention_mask": torch.stack(padded_attention_mask),
             "labels": torch.stack(labels),
+        }
+
+
+class SFTMetaDataset(Dataset):
+    """Dataset for SFT meta training that provides both direct and meta inputs.
+
+    Provides:
+    - Direct input_ids/attention_mask for inference
+    - Meta input_ids/attention_mask/labels for "Yes" answer
+    - Meta input_ids/attention_mask/labels for "No" answer
+    """
+
+    def __init__(
+        self,
+        dataset: Dataset,
+        tokenizer: PreTrainedTokenizer,
+        max_length: int = 512,
+        direct_prompt: str = DIRECT_QA_PROMPT,
+        meta_prompt: str = META_QA_PROMPT,
+    ):
+        """Initialize SFT Meta dataset.
+
+        Args:
+            dataset: Dataset with fields:
+                - question: Question string
+                - answers: List of answer aliases (for correctness checking)
+            tokenizer: Tokenizer to tokenize the questions and answers
+            max_length: Maximum length of the input text
+            direct_prompt: Prompt to use for direct questions (inference)
+            meta_prompt: Prompt to use for meta questions (training)
+        """
+        self.dataset = dataset
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.direct_prompt = direct_prompt
+        self.meta_prompt = meta_prompt
+
+    def __len__(self) -> int:
+        return len(self.dataset)
+
+    def __getitem__(self, idx: int) -> dict:
+        item = self.dataset[idx]
+
+        # Direct question for inference
+        direct_examples = [{"role": "user", "content": self.direct_prompt.format(question=item["question"])}]
+        direct_examples = self.tokenizer.apply_chat_template(
+            direct_examples, tokenize=False, add_generation_prompt=True, enable_thinking=False
+        )
+        direct_tokens = self.tokenizer(
+            direct_examples, return_tensors="pt", truncation=True, max_length=self.max_length
+        )
+
+        # Meta questions with "No" and "Yes" answers
+        meta_tokens = {}
+        for answer in ["No", "Yes"]:
+            meta_examples = [
+                {"role": "user", "content": self.meta_prompt.format(question=item["question"])},
+                {"role": "assistant", "content": answer},
+            ]
+            meta_examples = self.tokenizer.apply_chat_template(
+                meta_examples, tokenize=False, add_generation_prompt=True
+            )
+            meta_tokens[answer.lower()] = self.tokenizer(
+                meta_examples, return_tensors="pt", truncation=True, max_length=self.max_length
+            )
+
+        return {
+            "_dataset_idx": idx,
+            "question": item["question"],
+            "answers": item["answers"],
+            "direct_input_ids": direct_tokens["input_ids"].squeeze(0),
+            "direct_attention_mask": direct_tokens["attention_mask"].squeeze(0),
+            "meta_no_input_ids": meta_tokens["no"]["input_ids"].squeeze(0),
+            "meta_no_attention_mask": meta_tokens["no"]["attention_mask"].squeeze(0),
+            "meta_yes_input_ids": meta_tokens["yes"]["input_ids"].squeeze(0),
+            "meta_yes_attention_mask": meta_tokens["yes"]["attention_mask"].squeeze(0),
+        }
+
+    def sft_meta_collate_fn(self, batch: list[dict]) -> dict:
+        """Collate function that returns both direct and meta inputs for batch inference.
+
+        Meta inputs are batched together with shape [B, 2, L] where:
+        - B is batch size
+        - 2 is for [No, Yes] (index 0 = No, index 1 = Yes)
+        - L is sequence length
+        """
+        direct_input_ids = [item["direct_input_ids"] for item in batch]
+        direct_attention_mask = [item["direct_attention_mask"] for item in batch]
+
+        pad_token_id = (
+            self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else self.tokenizer.eos_token_id
+        )
+        pad_token_id = int(pad_token_id)
+
+        all_meta_lengths = []
+        for item in batch:
+            all_meta_lengths.append(item["meta_no_input_ids"].size(0))
+            all_meta_lengths.append(item["meta_yes_input_ids"].size(0))
+        max_meta_len = max(all_meta_lengths) if all_meta_lengths else 0
+
+        meta_input_ids_list = []
+        meta_attention_mask_list = []
+
+        for item in batch:
+            no_ids = item["meta_no_input_ids"]
+            no_mask = item["meta_no_attention_mask"]
+            no_pad_len = max_meta_len - no_ids.size(0)
+            no_padded_ids = torch.cat([torch.full((no_pad_len,), pad_token_id, dtype=no_ids.dtype), no_ids])
+            no_padded_mask = torch.cat([torch.zeros(no_pad_len, dtype=no_mask.dtype), no_mask])
+
+            yes_ids = item["meta_yes_input_ids"]
+            yes_mask = item["meta_yes_attention_mask"]
+            yes_pad_len = max_meta_len - yes_ids.size(0)
+            yes_padded_ids = torch.cat([torch.full((yes_pad_len,), pad_token_id, dtype=yes_ids.dtype), yes_ids])
+            yes_padded_mask = torch.cat([torch.zeros(yes_pad_len, dtype=yes_mask.dtype), yes_mask])
+
+            # Stack [No, Yes] -> [2, L]
+            meta_input_ids_list.append(torch.stack([no_padded_ids, yes_padded_ids]))
+            meta_attention_mask_list.append(torch.stack([no_padded_mask, yes_padded_mask]))
+
+        # Stack all items -> [B, 2, L]
+        meta_input_ids = torch.stack(meta_input_ids_list)
+        meta_attention_mask = torch.stack(meta_attention_mask_list)
+
+        direct_padded_input_ids = pad_sequence(direct_input_ids, batch_first=True, padding_value=pad_token_id)
+        direct_padded_attention_mask = pad_sequence(direct_attention_mask, batch_first=True, padding_value=0)
+
+        questions = [item["question"] for item in batch]
+        answers = [item["answers"] for item in batch]
+        dataset_indices = [item["_dataset_idx"] for item in batch]
+
+        return {
+            "direct_input_ids": direct_padded_input_ids,
+            "direct_attention_mask": direct_padded_attention_mask,
+            "meta_input_ids": meta_input_ids,
+            "meta_attention_mask": meta_attention_mask,
+            "question": questions,
+            "answers": answers,
+            "_dataset_idx": dataset_indices,
         }
 
 
