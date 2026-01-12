@@ -10,7 +10,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from meta.data import load_fictional_qa_rl, load_trivia_qa_rl
 from meta.dataset import RLDataset, pad_collate_fn
 from meta.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
-from meta.prompt import DIRECT_QA_PROMPT
+from meta.prompt import DIRECT_QA_PROMPT, META_QA_PROMPT
 from meta.utils import get_logger, seed_everything
 
 torch.set_grad_enabled(False)
@@ -57,7 +57,7 @@ def main(args):
         prompt = DIRECT_QA_PROMPT
     else:
         raise ValueError(f"Invalid dataset: {args.dataset}")
-    dataset = RLDataset(data, tokenizer, max_length=args.max_input_length, use_meta=True, prompt=prompt)
+    dataset = RLDataset(data, tokenizer, max_length=args.max_input_length, prompt=prompt, meta_prompt=META_QA_PROMPT)
     data_loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
