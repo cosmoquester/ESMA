@@ -272,8 +272,18 @@ class SFTMetaDataset(Dataset):
         meta_input_ids = torch.stack(meta_input_ids_list)
         meta_attention_mask = torch.stack(meta_attention_mask_list)
 
-        direct_padded_input_ids = pad_sequence(direct_input_ids, batch_first=True, padding_value=pad_token_id)
-        direct_padded_attention_mask = pad_sequence(direct_attention_mask, batch_first=True, padding_value=0)
+        # Pad direct inputs with left padding (consistent with meta inputs)
+        max_direct_len = max(ids.size(0) for ids in direct_input_ids) if direct_input_ids else 0
+        direct_padded_input_ids = []
+        direct_padded_attention_mask = []
+        for ids, mask in zip(direct_input_ids, direct_attention_mask):
+            pad_len = max_direct_len - ids.size(0)
+            padded_ids = torch.cat([torch.full((pad_len,), pad_token_id, dtype=ids.dtype), ids])
+            padded_mask = torch.cat([torch.zeros(pad_len, dtype=mask.dtype), mask])
+            direct_padded_input_ids.append(padded_ids)
+            direct_padded_attention_mask.append(padded_mask)
+        direct_padded_input_ids = torch.stack(direct_padded_input_ids)
+        direct_padded_attention_mask = torch.stack(direct_padded_attention_mask)
 
         questions = [item["question"] for item in batch]
         answers = [item["answers"] for item in batch]
