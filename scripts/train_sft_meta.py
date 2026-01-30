@@ -20,11 +20,11 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 
-from meta.data import load_fictional_qa_rl, load_trivia_qa_rl
-from meta.dataset import SFTMetaDataset
-from meta.metric import correctness_by_inclusion
-from meta.prompt import DIRECT_QA_PROMPT, META_QA_PROMPT
-from meta.utils import get_logger, seed_everything
+from esma.data import load_fictional_qa_rl, load_trivia_qa_rl
+from esma.dataset import SFTMetaDataset
+from esma.metric import correctness_by_inclusion
+from esma.prompt import DIRECT_QA_PROMPT, META_QA_PROMPT
+from esma.utils import get_logger, seed_everything
 
 # fmt: off
 parser = argparse.ArgumentParser(description="SFT Training for Language Models")

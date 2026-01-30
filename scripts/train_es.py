@@ -11,13 +11,13 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from meta.data import load_trivia_qa_rl
-from meta.dataset import RLDataset, pad_collate_fn, simple_collate_fn
-from meta.evolution import apply_evolution
-from meta.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
-from meta.prompt import META_QA_PROMPT
-from meta.reward import REWARD_TYPE_TO_FUNCTION
-from meta.utils import get_logger, seed_everything
+from esma.data import load_trivia_qa_rl
+from esma.dataset import RLDataset, pad_collate_fn, simple_collate_fn
+from esma.evolution import apply_evolution
+from esma.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
+from esma.prompt import META_QA_PROMPT
+from esma.reward import REWARD_TYPE_TO_FUNCTION
+from esma.utils import get_logger, seed_everything
 
 torch.set_grad_enabled(False)
 

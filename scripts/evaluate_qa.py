@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from meta.data import (
+from esma.data import (
     load_fictional_qa_rl,
     load_freebase_qa_rl,
     load_mkqa_rl,
@@ -14,9 +14,9 @@ from meta.data import (
     load_trivia_qa_rl,
     load_web_questions_rl,
 )
-from meta.dataset import RLDataset, pad_collate_fn
-from meta.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
-from meta.prompt import (
+from esma.dataset import RLDataset, pad_collate_fn
+from esma.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
+from esma.prompt import (
     DIRECT_QA_CN_PROMPT,
     DIRECT_QA_ES_PROMPT,
     DIRECT_QA_KO_PROMPT,
@@ -26,7 +26,7 @@ from meta.prompt import (
     META_QA_KO_PROMPT,
     META_QA_PROMPT,
 )
-from meta.utils import get_logger, seed_everything
+from esma.utils import get_logger, seed_everything
 
 parser = argparse.ArgumentParser(description="Evaluate LLM on TriviaQA and save to TSV")
 parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace Model ID")
