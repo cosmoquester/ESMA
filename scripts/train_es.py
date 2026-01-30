@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from esma.data import load_trivia_qa_rl
-from esma.dataset import ESMetaDataset, pad_collate_fn, simple_collate_fn
+from esma.dataset import ESDataset
 from esma.evolution import apply_evolution
 from esma.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
 from esma.prompt import META_QA_PROMPT
@@ -229,13 +229,13 @@ def main(args):
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     logger.info(f"[+] Tokenized dataset: {len(train_data)}")
 
-    train_dataset = ESMetaDataset(
+    train_dataset = ESDataset(
         train_data,
         tokenizer,
         max_length=args.max_input_length,
         meta_prompt=META_QA_PROMPT,
     )
-    val_dataset = ESMetaDataset(
+    val_dataset = ESDataset(
         val_data,
         tokenizer,
         max_length=args.max_input_length,
@@ -247,7 +247,7 @@ def main(args):
         shuffle=True,
         num_workers=args.num_workers,
         pin_memory=True,
-        collate_fn=simple_collate_fn,
+        collate_fn=ESDataset.simple_collate_fn,
     )
     val_loader = DataLoader(
         val_dataset,
@@ -255,7 +255,7 @@ def main(args):
         shuffle=False,
         num_workers=args.num_workers,
         pin_memory=True,
-        collate_fn=pad_collate_fn,
+        collate_fn=ESDataset.pad_collate_fn,
     )
     infinite_loader = itertools.chain.from_iterable(itertools.repeat(train_loader))
     val_loader = accelerator.prepare(val_loader)
@@ -324,7 +324,7 @@ def main(args):
                 run.log(all_val_metrics, step=iteration)
 
     test_data = load_trivia_qa_rl(split="test", num_samples=100)
-    test_dataset = ESMetaDataset(
+    test_dataset = ESDataset(
         test_data,
         tokenizer,
         max_length=args.max_input_length,
@@ -336,7 +336,7 @@ def main(args):
         shuffle=False,
         num_workers=args.num_workers,
         pin_memory=True,
-        collate_fn=pad_collate_fn,
+        collate_fn=ESDataset.pad_collate_fn,
     )
     test_loader = accelerator.prepare(test_loader)
     test_metrics = evaluate_model(model, tokenizer, test_loader, args.max_new_tokens, args.reward_type)

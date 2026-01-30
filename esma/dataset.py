@@ -76,6 +76,54 @@ class ESDataset(Dataset):
             example["meta_attention_mask"] = meta_tokens["attention_mask"].squeeze(0)
         return example
 
+    @staticmethod
+    def simple_collate_fn(batch: list[dict]) -> list[dict]:
+        batched = {
+            "question_id": [item["question_id"] for item in batch],
+            "input_ids": [item["input_ids"] for item in batch],
+            "question": [item["question"] for item in batch],
+            "attention_mask": [item["attention_mask"] for item in batch],
+            "answers": [item["answers"] for item in batch],
+        }
+        if "meta_input_ids" in batch[0]:
+            batched["meta_input_ids"] = pad_sequence(
+                [item["meta_input_ids"] for item in batch],
+                batch_first=True,
+                padding_side="left",
+            )
+            batched["meta_attention_mask"] = pad_sequence(
+                [item["meta_attention_mask"] for item in batch],
+                batch_first=True,
+                padding_side="left",
+            )
+        return batched
+
+    @staticmethod
+    def pad_collate_fn(batch: list[dict]) -> dict:
+        batched = {
+            "question_id": [item["question_id"] for item in batch],
+            "input_ids": pad_sequence([item["input_ids"] for item in batch], batch_first=True, padding_side="left"),
+            "question": [item["question"] for item in batch],
+            "attention_mask": pad_sequence(
+                [item["attention_mask"] for item in batch],
+                batch_first=True,
+                padding_side="left",
+            ),
+            "answers": [item["answers"] for item in batch],
+        }
+        if "meta_input_ids" in batch[0]:
+            batched["meta_input_ids"] = pad_sequence(
+                [item["meta_input_ids"] for item in batch],
+                batch_first=True,
+                padding_side="left",
+            )
+            batched["meta_attention_mask"] = pad_sequence(
+                [item["meta_attention_mask"] for item in batch],
+                batch_first=True,
+                padding_side="left",
+            )
+        return batched
+
 
 class SFTDataset(Dataset):
     def __init__(
@@ -298,51 +346,3 @@ class SFTMetaDataset(Dataset):
             "answers": answers,
             "_dataset_idx": dataset_indices,
         }
-
-
-def simple_collate_fn(batch: list[dict]) -> list[dict]:
-    batched = {
-        "question_id": [item["question_id"] for item in batch],
-        "input_ids": [item["input_ids"] for item in batch],
-        "question": [item["question"] for item in batch],
-        "attention_mask": [item["attention_mask"] for item in batch],
-        "answers": [item["answers"] for item in batch],
-    }
-    if "meta_input_ids" in batch[0]:
-        batched["meta_input_ids"] = pad_sequence(
-            [item["meta_input_ids"] for item in batch],
-            batch_first=True,
-            padding_side="left",
-        )
-        batched["meta_attention_mask"] = pad_sequence(
-            [item["meta_attention_mask"] for item in batch],
-            batch_first=True,
-            padding_side="left",
-        )
-    return batched
-
-
-def pad_collate_fn(batch: list[dict]) -> dict:
-    batched = {
-        "question_id": [item["question_id"] for item in batch],
-        "input_ids": pad_sequence([item["input_ids"] for item in batch], batch_first=True, padding_side="left"),
-        "question": [item["question"] for item in batch],
-        "attention_mask": pad_sequence(
-            [item["attention_mask"] for item in batch],
-            batch_first=True,
-            padding_side="left",
-        ),
-        "answers": [item["answers"] for item in batch],
-    }
-    if "meta_input_ids" in batch[0]:
-        batched["meta_input_ids"] = pad_sequence(
-            [item["meta_input_ids"] for item in batch],
-            batch_first=True,
-            padding_side="left",
-        )
-        batched["meta_attention_mask"] = pad_sequence(
-            [item["meta_attention_mask"] for item in batch],
-            batch_first=True,
-            padding_side="left",
-        )
-    return batched

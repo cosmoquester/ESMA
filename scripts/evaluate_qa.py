@@ -14,7 +14,7 @@ from esma.data import (
     load_trivia_qa_rl,
     load_web_questions_rl,
 )
-from esma.dataset import ESMetaDataset, pad_collate_fn
+from esma.dataset import ESDataset
 from esma.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
 from esma.prompt import (
     DIRECT_QA_CN_PROMPT,
@@ -112,9 +112,13 @@ def main(args):
             meta_prompt = META_QA_PROMPT
     else:
         raise ValueError(f"Invalid dataset: {args.dataset}")
-    dataset = ESMetaDataset(data, tokenizer, max_length=args.max_input_length, prompt=prompt, meta_prompt=meta_prompt)
+    dataset = ESDataset(data, tokenizer, max_length=args.max_input_length, prompt=prompt, meta_prompt=meta_prompt)
     data_loader = DataLoader(
-        dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=pad_collate_fn
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        collate_fn=ESDataset.pad_collate_fn,
     )
     logger.info(f"[+] Total samples to evaluate: {len(data)}")
 
