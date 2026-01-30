@@ -1,5 +1,10 @@
 # ESMA: Fine-Tuning Language Models to Know What They Know
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/cosmoquester/ESMA/tree/master.svg?style=svg&circle-token=CCIPRJ_5kdf2uTPpaYM3ZwjQqfy1w_6c40ac845d61d86a182263520033f123cdf0337a)](https://dl.circleci.com/status-badge/redirect/gh/cosmoquester/ESMA/tree/master)
+[![codecov](https://codecov.io/gh/cosmoquester/ESMA/graph/badge.svg?token=vG6ctZxQuk)](https://codecov.io/gh/cosmoquester/ESMA)
+
 This repository contains the code for **Evolution Strategy for Metacognitive Alignment (ESMA)**, a method to improve large language models’ awareness of their own knowledge. The work is described in:
 
 ## Overview
