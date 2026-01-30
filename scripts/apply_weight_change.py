@@ -11,6 +11,7 @@ parser.add_argument("weight_change", type=str)
 parser.add_argument(
     "--filter-ratio", type=float, default=1.0, help="Ratio of weight change to filter, 1.0 means no filtering"
 )
+parser.add_argument("--filter-prefix", type=str, help="Prefix to filter weight change")
 parser.add_argument("--from-bottom", "-b", action="store_true", help="Filter from bottom instead of top")
 parser.add_argument("--output-path", "-o", type=str, required=True)
 args = parser.parse_args()
@@ -47,6 +48,8 @@ def main(args):
     print("[+] Applying weight change...")
     for name, param in tqdm(model.named_parameters(), desc="Applying weight change"):
         if name in weight_change:
+            if args.filter_prefix is not None and name.startswith(args.filter_prefix):
+                continue
             v = weight_change[name]
             if args.filter_ratio < 1.0:
                 mask = v.abs() < threshold
