@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from esma.data import load_trivia_qa_rl
-from esma.dataset import RLDataset, pad_collate_fn, simple_collate_fn
+from esma.dataset import ESMetaDataset, pad_collate_fn, simple_collate_fn
 from esma.evolution import apply_evolution
 from esma.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
 from esma.prompt import META_QA_PROMPT
@@ -229,13 +229,13 @@ def main(args):
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     logger.info(f"[+] Tokenized dataset: {len(train_data)}")
 
-    train_dataset = RLDataset(
+    train_dataset = ESMetaDataset(
         train_data,
         tokenizer,
         max_length=args.max_input_length,
         meta_prompt=META_QA_PROMPT,
     )
-    val_dataset = RLDataset(
+    val_dataset = ESMetaDataset(
         val_data,
         tokenizer,
         max_length=args.max_input_length,
@@ -324,7 +324,7 @@ def main(args):
                 run.log(all_val_metrics, step=iteration)
 
     test_data = load_trivia_qa_rl(split="test", num_samples=100)
-    test_dataset = RLDataset(
+    test_dataset = ESMetaDataset(
         test_data,
         tokenizer,
         max_length=args.max_input_length,

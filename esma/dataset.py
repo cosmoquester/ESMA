@@ -8,7 +8,7 @@ from transformers import PreTrainedTokenizer
 from .prompt import DIRECT_QA_PROMPT, META_QA_PROMPT
 
 
-class RLDataset(Dataset):
+class ESDataset(Dataset):
     def __init__(
         self,
         dataset: Dataset,
