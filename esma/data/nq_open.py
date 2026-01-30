@@ -21,7 +21,11 @@ def load_nq_open(split: str = "validation", num_samples: int | None = None) -> D
                 - question: Question (string)
                 - answer: List of possible answers (list of strings)
     """
-    dataset = load_dataset("google-research-datasets/nq_open", split=split)
+    dataset = load_dataset(
+        "google-research-datasets/nq_open",
+        split=split,
+        revision="5dd9790a83002ad084ddeb7c420dc716852c6f28",
+    )
     if num_samples is not None:
         dataset = dataset.select(range(min(len(dataset), num_samples)))
     return dataset

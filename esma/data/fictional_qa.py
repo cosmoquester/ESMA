@@ -21,9 +21,12 @@ def load_fictional_qa() -> Dataset:
                     - value: Value (string)
                     - type: Type of the answer
     """
-    return load_dataset("tomg-group-umd/fictionalqa", "fict_qa", split="train").filter(
-        lambda x: x["duplicate_relationship"] is None
-    )
+    return load_dataset(
+        "tomg-group-umd/fictionalqa",
+        "fict_qa",
+        split="train",
+        revision="e8100f525e9ae97bb9db9e220339ee513114c01e",
+    ).filter(lambda x: x["duplicate_relationship"] is None)
 
 
 def load_fictional_qa_rl(

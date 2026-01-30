@@ -24,7 +24,12 @@ def load_trivia_qa(split: str = "validation", num_samples: int | None = None) ->
                     - value: Value (string)
                     - type: Type of the answer
     """
-    dataset = load_dataset("trivia_qa", "rc", split=split)
+    dataset = load_dataset(
+        "trivia_qa",
+        "rc",
+        split=split,
+        revision="0f7faf33a3908546c6fd5b73a660e0f8ff173c2f",
+    )
     if num_samples is not None:
         dataset = dataset.select(range(min(len(dataset), num_samples)))
     return dataset

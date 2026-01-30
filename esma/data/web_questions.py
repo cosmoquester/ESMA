@@ -22,7 +22,11 @@ def load_web_questions(split: str = "test", num_samples: int | None = None) -> D
                 - question: Question (string)
                 - answers: List of answer strings (list of strings)
     """
-    dataset = load_dataset("stanfordnlp/web_questions", split=split)  # type: ignore
+    dataset = load_dataset(
+        "stanfordnlp/web_questions",
+        split=split,
+        revision="0e473cbe21d1e91ec18da343644498be6a3f5454",
+    )  # type: ignore
     if num_samples is not None:
         dataset = dataset.select(range(min(len(dataset), num_samples)))  # type: ignore
     return dataset  # type: ignore
