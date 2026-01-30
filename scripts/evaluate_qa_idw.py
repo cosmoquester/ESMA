@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from esma.data import load_fictional_qa_meta, load_trivia_qa_meta
+from esma.data import META_DATASETS, load_fictional_qa_meta, load_trivia_qa_meta
 from esma.dataset import ESDataset
 from esma.metric import IGNORE_VALUE, meta_metrics
 from esma.prompt import DIRECT_QA_WITH_IDW_PROMPT
@@ -14,9 +14,7 @@ from esma.utils import get_logger, seed_everything
 
 parser = argparse.ArgumentParser(description="Evaluate LLM on TriviaQA and save to TSV")
 parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace Model ID")
-parser.add_argument(
-    "--dataset", type=str, default="triviaqa", choices=["triviaqa", "fictionalqa"], help="Dataset to evaluate"
-)
+parser.add_argument("--dataset", type=str, default="triviaqa", choices=META_DATASETS.keys(), help="Dataset to evaluate")
 parser.add_argument("--split", type=str, default="validation", help="Split to evaluate")
 parser.add_argument("--batch-size", type=int, default=128, help="Batch size for inference")
 parser.add_argument("--num-samples", type=int, help="Number of samples to evaluate (0 for all)")
@@ -42,11 +40,11 @@ def main(args):
     model = AutoModelForCausalLM.from_pretrained(args.model, dtype="auto", device_map="auto")
     model.eval()
 
-    if args.dataset == "triviaqa":
+    if args.dataset == "trivia_qa":
         logger.info("[+] Loading TriviaQA dataset...")
         data = load_trivia_qa_meta(split=args.split, num_samples=args.num_samples)
         prompt = DIRECT_QA_WITH_IDW_PROMPT
-    elif args.dataset == "fictionalqa":
+    elif args.dataset == "fictional_qa":
         logger.info("[+] Loading FictionalQA dataset...")
         data = load_fictional_qa_meta(split=args.split, num_samples=args.num_samples)
         prompt = DIRECT_QA_WITH_IDW_PROMPT

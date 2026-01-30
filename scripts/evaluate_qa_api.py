@@ -7,7 +7,7 @@ from multiprocessing import Pool
 from openai import OpenAI
 from tqdm import tqdm
 
-from esma.data import load_fictional_qa_meta, load_trivia_qa_meta
+from esma.data import META_DATASETS, load_fictional_qa_meta, load_trivia_qa_meta
 from esma.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
 from esma.prompt import DIRECT_QA_PROMPT, META_QA_PROMPT
 from esma.utils import get_logger, seed_everything
@@ -23,9 +23,7 @@ parser = argparse.ArgumentParser(description="Evaluate OpenAI API on QA datasets
 parser.add_argument(
     "--model", type=str, default="gpt-5-nano-2025-08-07", choices=OPENAI_PRICING.keys(), help="OpenAI model ID"
 )
-parser.add_argument(
-    "--dataset", type=str, default="triviaqa", choices=["triviaqa", "fictionalqa"], help="Dataset to evaluate"
-)
+parser.add_argument("--dataset", type=str, default="triviaqa", choices=META_DATASETS.keys(), help="Dataset to evaluate")
 parser.add_argument("--start", type=int, help="Start index to evaluate")
 parser.add_argument("--split", type=str, default="validation", help="Split to evaluate")
 parser.add_argument("--num-samples", type=int, help="Number of samples to evaluate (0 for all)")
@@ -122,13 +120,13 @@ def main(args):
     logger.info(f"[+] Using OpenAI model: {args.model}")
 
     # Load dataset
-    if args.dataset == "triviaqa":
+    if args.dataset == "trivia_qa":
         logger.info("[+] Loading TriviaQA dataset...")
         data = load_trivia_qa_meta(split=args.split, num_samples=args.num_samples)
         if args.start is not None:
             data = data.select(range(args.start, len(data)))
         prompt = DIRECT_QA_PROMPT
-    elif args.dataset == "fictionalqa":
+    elif args.dataset == "fictional_qa":
         logger.info("[+] Loading FictionalQA dataset...")
         data = load_fictional_qa_meta(split=args.split, num_samples=args.num_samples)
         prompt = DIRECT_QA_PROMPT
