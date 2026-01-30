@@ -14,11 +14,9 @@ from meta.utils import get_logger, seed_everything
 
 # Format: (input_price_per_1M, output_price_per_1M)
 OPENAI_PRICING = {
+    "gemini-3-flash-preview": (0.50, 3.00),
     "gpt-5.2-2025-12-11": (1.75, 14.00),
-    "gpt-5-mini-2025-08-07": (0.25, 2.00),
-    "gpt-5-nano-2025-08-07": (0.05, 0.4),
     "claude-sonnet-4-5-20250929": (3.00, 15.00),
-    "claude-opus-4-5-20251101": (5.00, 25.00),
 }
 
 parser = argparse.ArgumentParser(description="Evaluate OpenAI API on QA datasets and save to TSV")
@@ -28,6 +26,7 @@ parser.add_argument(
 parser.add_argument(
     "--dataset", type=str, default="triviaqa", choices=["triviaqa", "fictionalqa"], help="Dataset to evaluate"
 )
+parser.add_argument("--start", type=int, help="Start index to evaluate")
 parser.add_argument("--split", type=str, default="validation", help="Split to evaluate")
 parser.add_argument("--num-samples", type=int, help="Number of samples to evaluate (0 for all)")
 parser.add_argument("--output-path", type=str, help="Output TSV file path")
@@ -40,6 +39,7 @@ def call_openai_api(client: OpenAI, model: str, prompt: str, max_tokens: int) ->
     """Call OpenAI API with a single prompt. Returns (content, usage_dict)."""
     response = client.chat.completions.create(
         model=model,
+        reasoning_effort="none",
         messages=[{"role": "user", "content": prompt}],
         max_completion_tokens=max_tokens,
     )
@@ -125,6 +125,8 @@ def main(args):
     if args.dataset == "triviaqa":
         logger.info("[+] Loading TriviaQA dataset...")
         data = load_trivia_qa_rl(split=args.split, num_samples=args.num_samples)
+        if args.start is not None:
+            data = data.select(range(args.start, len(data)))
         prompt = DIRECT_QA_PROMPT
     elif args.dataset == "fictionalqa":
         logger.info("[+] Loading FictionalQA dataset...")
@@ -139,7 +141,7 @@ def main(args):
     if args.output_path is None:
         base_model = args.model.replace("/", "_")
         os.makedirs("eval_outputs", exist_ok=True)
-        args.output_path = f"eval_outputs/{args.dataset}_{base_model}_{args.split}_{args.num_samples}.tsv"
+        args.output_path = f"eval_outputs/{args.dataset}_{base_model}_{args.split}_{args.num_samples}_{args.start}.tsv"
 
     # Prepare arguments for multiprocessing
     process_args = [(item, args.model, prompt, META_QA_PROMPT, args.max_tokens) for item in data]
