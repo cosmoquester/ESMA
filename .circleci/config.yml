@@ -5,9 +5,9 @@ orbs:
 
 executors:
   python-executor:
-    working_directory: ~/meta-cognition
+    working_directory: ~/ESMA
     docker:
-      - image: circleci/python:3.8
+      - image: circleci/python:3.12
 
 commands:
   install-packages:
@@ -49,11 +49,10 @@ jobs:
       - install-packages
 
       - run:
-          name: Run black, isort
+          name: Run Ruff
           command: |
             source env/bin/activate
-            black --check .
-            isort .
+            ruff check esma scripts tests
 
 workflows:
   main:
