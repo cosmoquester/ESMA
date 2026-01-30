@@ -37,7 +37,7 @@ g.add_argument("--alpha", type=float, default=5e-4, help="Alpha")
 g.add_argument("--num-iterations", type=int, default=300, help="Number of iterations")
 g.add_argument("--population-size", type=int, default=32, help="Population size")
 g.add_argument("--num-data-per-iteration", "-n", type=int, default=256, help="Number of data per iteration")
-g.add_argument("--reward-type", type=str, default="multilevel", choices=REWARD_TYPE_TO_FUNCTION.keys(), help="Reward type")
+g.add_argument("--reward-type", type=str, default="multilevel", choices=REWARD_TYPE_TO_FUNCTION.keys(), help="Reward type")  # noqa: E501
 
 g = parser.add_argument_group("Experiment Settings")
 g.add_argument("--batch-size", type=int, default=256, help="Batch size")
