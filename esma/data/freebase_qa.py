@@ -66,7 +66,7 @@ def load_freebase_qa(split: str = "test", num_samples: int | None = None) -> Dat
     return dataset
 
 
-def load_freebase_qa_rl(split: str = "test", num_samples: int | None = None, num_proc: int | None = None) -> Dataset:
+def load_freebase_qa_meta(split: str = "test", num_samples: int | None = None, num_proc: int | None = None) -> Dataset:
     """Load FreebaseQA dataset formatted for RL training.
 
     Args:

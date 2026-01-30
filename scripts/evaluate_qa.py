@@ -7,12 +7,12 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from esma.data import (
-    load_fictional_qa_rl,
-    load_freebase_qa_rl,
-    load_mkqa_rl,
-    load_nq_open_rl,
-    load_trivia_qa_rl,
-    load_web_questions_rl,
+    load_fictional_qa_meta,
+    load_freebase_qa_meta,
+    load_mkqa_meta,
+    load_nq_open_meta,
+    load_trivia_qa_meta,
+    load_web_questions_meta,
 )
 from esma.dataset import ESDataset
 from esma.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
@@ -72,32 +72,32 @@ def main(args):
 
     if args.dataset == "triviaqa":
         logger.info("[+] Loading TriviaQA dataset...")
-        data = load_trivia_qa_rl(split=args.split, num_samples=args.num_samples)
+        data = load_trivia_qa_meta(split=args.split, num_samples=args.num_samples)
         prompt = DIRECT_QA_PROMPT
         meta_prompt = META_QA_PROMPT
     elif args.dataset == "fictionalqa":
         logger.info("[+] Loading FictionalQA dataset...")
-        data = load_fictional_qa_rl(split=args.split, num_samples=args.num_samples)
+        data = load_fictional_qa_meta(split=args.split, num_samples=args.num_samples)
         prompt = DIRECT_QA_PROMPT
         meta_prompt = META_QA_PROMPT
     elif args.dataset == "nq_open":
         logger.info("[+] Loading NQ-Open dataset...")
-        data = load_nq_open_rl(split=args.split, num_samples=args.num_samples)
+        data = load_nq_open_meta(split=args.split, num_samples=args.num_samples)
         prompt = DIRECT_QA_PROMPT
         meta_prompt = META_QA_PROMPT
     elif args.dataset == "web_questions":
         logger.info("[+] Loading WebQuestions dataset...")
-        data = load_web_questions_rl(split=args.split, num_samples=args.num_samples)
+        data = load_web_questions_meta(split=args.split, num_samples=args.num_samples)
         prompt = DIRECT_QA_PROMPT
         meta_prompt = META_QA_PROMPT
     elif args.dataset == "freebase_qa":
         logger.info("[+] Loading FreebaseQA dataset...")
-        data = load_freebase_qa_rl(split=args.split, num_samples=args.num_samples)
+        data = load_freebase_qa_meta(split=args.split, num_samples=args.num_samples)
         prompt = DIRECT_QA_PROMPT
         meta_prompt = META_QA_PROMPT
     elif args.dataset == "mkqa":
         logger.info("[+] Loading MKQA dataset...")
-        data = load_mkqa_rl(split=args.split, num_samples=args.num_samples, lang=args.lang)
+        data = load_mkqa_meta(split=args.split, num_samples=args.num_samples, lang=args.lang)
         if args.lang == "ko":
             prompt = DIRECT_QA_KO_PROMPT
             meta_prompt = META_QA_KO_PROMPT

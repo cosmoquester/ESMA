@@ -7,7 +7,7 @@ from multiprocessing import Pool
 from openai import OpenAI
 from tqdm import tqdm
 
-from esma.data import load_fictional_qa_rl, load_trivia_qa_rl
+from esma.data import load_fictional_qa_meta, load_trivia_qa_meta
 from esma.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
 from esma.prompt import DIRECT_QA_PROMPT, META_QA_PROMPT
 from esma.utils import get_logger, seed_everything
@@ -124,13 +124,13 @@ def main(args):
     # Load dataset
     if args.dataset == "triviaqa":
         logger.info("[+] Loading TriviaQA dataset...")
-        data = load_trivia_qa_rl(split=args.split, num_samples=args.num_samples)
+        data = load_trivia_qa_meta(split=args.split, num_samples=args.num_samples)
         if args.start is not None:
             data = data.select(range(args.start, len(data)))
         prompt = DIRECT_QA_PROMPT
     elif args.dataset == "fictionalqa":
         logger.info("[+] Loading FictionalQA dataset...")
-        data = load_fictional_qa_rl(split=args.split, num_samples=args.num_samples)
+        data = load_fictional_qa_meta(split=args.split, num_samples=args.num_samples)
         prompt = DIRECT_QA_PROMPT
     else:
         raise ValueError(f"Invalid dataset: {args.dataset}")

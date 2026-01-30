@@ -29,7 +29,7 @@ def load_fictional_qa() -> Dataset:
     ).filter(lambda x: x["duplicate_relationship"] is None)
 
 
-def load_fictional_qa_rl(
+def load_fictional_qa_meta(
     split: str = "train", num_samples: int | None = None, num_proc: int | None = None, seed: int = 42
 ) -> Dataset:
     if num_proc is None:

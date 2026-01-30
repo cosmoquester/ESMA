@@ -20,7 +20,7 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 
-from esma.data import load_fictional_qa_rl, load_trivia_qa_rl
+from esma.data import load_fictional_qa_meta, load_trivia_qa_meta
 from esma.dataset import SFTDataset
 from esma.prompt import DIRECT_QA_PROMPT
 from esma.utils import get_logger, seed_everything
@@ -164,12 +164,12 @@ def main(args):
     # Load dataset
     logger.info(f"[+] Loading {args.dataset} dataset...")
     if args.dataset == "trivia_qa":
-        train_data = load_trivia_qa_rl(split="train", num_samples=args.num_samples)
-        val_data = load_trivia_qa_rl(split="validation", num_samples=args.num_val_samples)
+        train_data = load_trivia_qa_meta(split="train", num_samples=args.num_samples)
+        val_data = load_trivia_qa_meta(split="validation", num_samples=args.num_val_samples)
         prompt = DIRECT_QA_PROMPT
     elif args.dataset == "fictional_qa":
-        train_data = load_fictional_qa_rl(split="train", num_samples=args.num_samples)
-        val_data = load_fictional_qa_rl(split="validation", num_samples=args.num_val_samples)
+        train_data = load_fictional_qa_meta(split="train", num_samples=args.num_samples)
+        val_data = load_fictional_qa_meta(split="validation", num_samples=args.num_val_samples)
         prompt = DIRECT_QA_PROMPT
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")

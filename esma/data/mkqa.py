@@ -36,7 +36,7 @@ def load_mkqa(split: str = "train", num_samples: int | None = None) -> Dataset:
     return dataset  # type: ignore
 
 
-def load_mkqa_rl(
+def load_mkqa_meta(
     split: str = "train", num_samples: int | None = None, num_proc: int | None = None, lang: str = "en"
 ) -> Dataset:
     """Load MKQA dataset formatted for RL training.

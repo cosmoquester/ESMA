@@ -31,7 +31,9 @@ def load_nq_open(split: str = "validation", num_samples: int | None = None) -> D
     return dataset
 
 
-def load_nq_open_rl(split: str = "validation", num_samples: int | None = None, num_proc: int | None = None) -> Dataset:
+def load_nq_open_meta(
+    split: str = "validation", num_samples: int | None = None, num_proc: int | None = None
+) -> Dataset:
     """Load NQ-Open dataset formatted for RL training.
 
     Args:

@@ -11,7 +11,7 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from esma.data import load_trivia_qa_rl
+from esma.data import load_trivia_qa_meta
 from esma.dataset import ESDataset
 from esma.evolution import apply_evolution
 from esma.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
@@ -221,8 +221,8 @@ def main(args):
     logger.info(f"[+] Using seed: {args.seed}")
 
     logger.info("[+] Loading TriviaQA dataset...")
-    train_data = load_trivia_qa_rl(split="train", num_samples=args.num_samples)
-    val_data = load_trivia_qa_rl(split="validation", num_samples=args.num_val_samples)
+    train_data = load_trivia_qa_meta(split="train", num_samples=args.num_samples)
+    val_data = load_trivia_qa_meta(split="validation", num_samples=args.num_val_samples)
     logger.info(f"[+] Total samples: {len(train_data)}")
 
     logger.info(f"[+] Loading tokenizer {args.model}...")
@@ -323,7 +323,7 @@ def main(args):
             if run is not None and accelerator.is_main_process:
                 run.log(all_val_metrics, step=iteration)
 
-    test_data = load_trivia_qa_rl(split="test", num_samples=100)
+    test_data = load_trivia_qa_meta(split="test", num_samples=100)
     test_dataset = ESDataset(
         test_data,
         tokenizer,

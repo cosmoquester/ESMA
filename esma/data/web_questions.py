@@ -32,7 +32,9 @@ def load_web_questions(split: str = "test", num_samples: int | None = None) -> D
     return dataset  # type: ignore
 
 
-def load_web_questions_rl(split: str = "test", num_samples: int | None = None, num_proc: int | None = None) -> Dataset:
+def load_web_questions_meta(
+    split: str = "test", num_samples: int | None = None, num_proc: int | None = None
+) -> Dataset:
     """Load WebQuestions dataset formatted for RL training.
 
     Args:

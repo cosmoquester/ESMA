@@ -35,7 +35,7 @@ def load_trivia_qa(split: str = "validation", num_samples: int | None = None) ->
     return dataset
 
 
-def load_trivia_qa_rl(
+def load_trivia_qa_meta(
     split: str = "validation", num_samples: int | None = None, num_proc: int | None = None
 ) -> Dataset:
     if num_proc is None:

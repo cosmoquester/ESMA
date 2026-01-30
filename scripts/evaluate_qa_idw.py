@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from esma.data import load_fictional_qa_rl, load_trivia_qa_rl
+from esma.data import load_fictional_qa_meta, load_trivia_qa_meta
 from esma.dataset import ESDataset
 from esma.metric import IGNORE_VALUE, meta_metrics
 from esma.prompt import DIRECT_QA_WITH_IDW_PROMPT
@@ -44,11 +44,11 @@ def main(args):
 
     if args.dataset == "triviaqa":
         logger.info("[+] Loading TriviaQA dataset...")
-        data = load_trivia_qa_rl(split=args.split, num_samples=args.num_samples)
+        data = load_trivia_qa_meta(split=args.split, num_samples=args.num_samples)
         prompt = DIRECT_QA_WITH_IDW_PROMPT
     elif args.dataset == "fictionalqa":
         logger.info("[+] Loading FictionalQA dataset...")
-        data = load_fictional_qa_rl(split=args.split, num_samples=args.num_samples)
+        data = load_fictional_qa_meta(split=args.split, num_samples=args.num_samples)
         prompt = DIRECT_QA_WITH_IDW_PROMPT
     else:
         raise ValueError(f"Invalid dataset: {args.dataset}")
