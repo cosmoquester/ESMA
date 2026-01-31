@@ -29,7 +29,7 @@ def load_mkqa(split: str = "train", num_samples: int | None = None) -> Dataset:
     dataset = load_dataset(
         "apple/mkqa",
         split=split,
-        revision="325131889721ae0ed885b76ecb8011369d75abad",
+        revision="d7a2b9681ece319c53f8c2fe850eb4b487cec912",
     )  # type: ignore
     if num_samples is not None:
         dataset = dataset.select(range(min(len(dataset), num_samples)))  # type: ignore
