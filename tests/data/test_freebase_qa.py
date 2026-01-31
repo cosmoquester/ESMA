@@ -1,4 +1,5 @@
 """Tests for FreebaseQA data loaders."""
+
 import pytest
 
 from esma.data import load_freebase_qa, load_freebase_qa_meta

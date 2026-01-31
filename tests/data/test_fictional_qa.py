@@ -1,4 +1,5 @@
 """Tests for FictionalQA data loaders."""
+
 import pytest
 
 from esma.data import load_fictional_qa, load_fictional_qa_meta

@@ -1,4 +1,5 @@
 """Tests for MKQA data loaders."""
+
 import pytest
 
 from esma.data import load_mkqa, load_mkqa_meta

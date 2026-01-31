@@ -17,9 +17,7 @@ def apply_evolution(
         gen.manual_seed(int(seed))
 
         for param in model.parameters():
-            update = torch.randn(
-                param.shape, generator=gen, device=param.device, dtype=param.dtype
-            )
+            update = torch.randn(param.shape, generator=gen, device=param.device, dtype=param.dtype)
             update.mul_(relative_scales[idx] * absolute_scale / len(seeds))
 
             if reverse:
