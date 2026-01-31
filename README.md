@@ -1,9 +1,11 @@
 # ESMA: Fine-Tuning Language Models to Know What They Know
 
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![CircleCI](https://dl.circleci.com/status-badge/img/gh/cosmoquester/ESMA/tree/main.svg?style=svg&circle-token=CCIPRJ_3Rem2YqPXQh2HkCjUBcccb_6ae74c3a5b9fffc96541ddaa19bc0b9c018ed0fa)](https://dl.circleci.com/status-badge/redirect/gh/cosmoquester/ESMA/tree/main)
 [![codecov](https://codecov.io/gh/cosmoquester/ESMA/graph/badge.svg?token=vG6ctZxQuk)](https://codecov.io/gh/cosmoquester/ESMA)
+[![arXiv](https://img.shields.io/badge/arXiv-XXXX.XXXXX-b31b1b.svg)](https://arxiv.org)
 
 This repository contains the code for **Evolution Strategy for Metacognitive Alignment (ESMA)**, a method to improve large language models’ awareness of their own knowledge. The work is described in:
 
@@ -47,7 +49,7 @@ pip install -e .
 
 ## Quick Start
 
-### Train with ESMA (evolution strategy)
+### Train with ESMA
 
 ```bash
 python scripts/train_es.py \
@@ -60,7 +62,7 @@ python scripts/train_es.py \
 
 Hyperparameters (e.g. σ, α, iterations, population size) follow the paper; `--reward-type esma` uses the joint reward (correctness + meta-alignment).
 
-### Evaluate a model (dual-prompt metacognition)
+### Evaluate a model
 
 ```bash
 python scripts/evaluate_qa.py --model path/to/model
