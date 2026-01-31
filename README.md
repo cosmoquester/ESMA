@@ -15,7 +15,7 @@ Metacognition, knowing what one knows, is central to intelligence. This project 
 
 1. **A measurement framework and evaluation tools** for LLM metacognition: a dual-prompt protocol (Direct Questions + Meta Questions), the **d′<sub>type2</sub>** metric from signal detection theory, and evaluation for d′<sub>type2</sub>, raw alignment, accuracy, yes/no ratios, and related metrics on TriviaQA and other QA datasets.
 2. **ESMA**: evolution-strategy-based fine-tuning that strengthens the link between a model’s internal knowledge and its explicit answers, including "Do you know the answer?" style meta-questions.
-3. **Evolution strategy weight patching scripts** to extract weight deltas (tuned − base) and apply sparse or full updates (e.g. top/bottom *p*% by magnitude) for analyzing which parameter changes drive metacognitive improvement ([paper](https://nn.cs.utexas.edu/downloads/papers/park.metacognition-0126.pdf), §5.6).
+3. **Evolution strategy weight patching scripts** to extract weight deltas (tuned − base) and apply sparse or full updates (e.g. top/bottom *p*% by magnitude) for analyzing which parameter changes drive metacognitive improvement.
 
 ESMA uses a population of weight-perturbed models, a joint reward over direct correctness and meta-alignment, and weighted averaging of parameters. It improves metacognitive sensitivity (e.g. d′<sub>type2</sub> ≈ 1) and generalizes to unseen prompts, languages, and datasets.
 
