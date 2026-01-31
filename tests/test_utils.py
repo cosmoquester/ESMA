@@ -4,7 +4,6 @@ import logging
 import random
 
 import numpy as np
-import pytest
 import torch
 
 from esma.utils import (

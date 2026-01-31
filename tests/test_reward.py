@@ -1,7 +1,5 @@
 """Tests for esma.reward."""
 
-import pytest
-
 from esma.reward import (
     REWARD_TYPE_TO_FUNCTION,
     correct_reward,
