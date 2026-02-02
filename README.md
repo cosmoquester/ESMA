@@ -52,11 +52,9 @@ pip install -e .
 ### Train with ESMA
 
 ```bash
-python scripts/train_es.py \
+accelerate launch --num_processes 8 \
+  scripts/train_es.py \
   --model Qwen/Qwen2.5-1.5B-Instruct \
-  --sigma 1e-3 --alpha 5e-4 \
-  --num-iterations 750 --population-size 32 \
-  --num-data-per-iteration 256 \
   --reward-type esma
 ```
 
