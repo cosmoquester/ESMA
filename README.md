@@ -5,7 +5,7 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![CircleCI](https://dl.circleci.com/status-badge/img/gh/cosmoquester/ESMA/tree/main.svg?style=svg&circle-token=CCIPRJ_3Rem2YqPXQh2HkCjUBcccb_6ae74c3a5b9fffc96541ddaa19bc0b9c018ed0fa)](https://dl.circleci.com/status-badge/redirect/gh/cosmoquester/ESMA/tree/main)
 [![codecov](https://codecov.io/gh/cosmoquester/ESMA/graph/badge.svg?token=vG6ctZxQuk)](https://codecov.io/gh/cosmoquester/ESMA)
-[![arXiv](https://img.shields.io/badge/arXiv-XXXX.XXXXX-b31b1b.svg)](https://arxiv.org)
+[![arXiv](https://img.shields.io/badge/arXiv-2602.02605-b31b1b.svg)](https://arxiv.org/abs/2602.02605)
 
 This repository contains the code for **Evolution Strategy for Metacognitive Alignment (ESMA)**, a method to improve large language models’ awareness of their own knowledge. The work is described in:
 
@@ -73,5 +73,13 @@ Use `--help` for data paths, batch size, and output options.
 If you use this code or the method, please cite:
 
 ```bibtex
-TBD
+@misc{park2026finetuninglanguagemodelsknow,
+      title={Fine-Tuning Language Models to Know What They Know},
+      author={Sangjun Park and Elliot Meyerson and Xin Qiu and Risto Miikkulainen},
+      year={2026},
+      eprint={2602.02605},
+      archivePrefix={arXiv},
+      primaryClass={cs.NE},
+      url={https://arxiv.org/abs/2602.02605},
+}
 ```
