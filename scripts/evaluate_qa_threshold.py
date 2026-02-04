@@ -126,27 +126,6 @@ def main(args):
         all_no_failures.extend(no_failures)
         all_meta_alignments.extend(meta_alignments)
 
-    sorted_results = sorted(zip(all_yes_over_no, all_direct_correctness))
-    best_threshold = sorted_results[0][0]
-    gain = 0
-    for yes_over_no, direct_correctness in sorted_results:
-        if direct_correctness:
-            if gain >= 0:
-                best_threshold = yes_over_no
-                gain = -1
-            else:
-                gain -= 1
-        else:
-            gain += 1
-    if gain > 0:
-        best_threshold = sorted_results[-1][0] + 1e-6
-    logger.info(f"[+] Best threshold: {best_threshold}")
-
-    best_meta_answer = ["Yes" if p >= best_threshold else "No" for p in all_yes_over_no]
-    _, best_yes, best_yes_failures, best_no_failures, best_meta_alignments = meta_metrics(
-        all_predictions, best_meta_answer, all_ground_truths, keep_length=True
-    )
-
     with open(args.output_path, mode="w", encoding="utf-8") as f:
         writer = csv.writer(f, delimiter="\t")
         writer.writerow(
@@ -163,11 +142,6 @@ def main(args):
                 "meta_alignments",
                 "yes_over_no",
                 "confidence",
-                "best_meta_answer",
-                "best_yes",
-                "best_yes_failures",
-                "best_no_failures",
-                "best_meta_alignments",
             ]
         )
         for (
@@ -182,11 +156,6 @@ def main(args):
             no_failures,
             meta_alignments,
             yes_over_no,
-            _best_meta_answer,
-            _best_yes,
-            best_yes_failure,
-            best_no_failure,
-            best_meta_alignment,
         ) in zip(
             all_question_ids,
             all_questions,
@@ -199,11 +168,6 @@ def main(args):
             all_no_failures,
             all_meta_alignments,
             all_yes_over_no,
-            best_meta_answer,
-            best_yes,
-            best_yes_failures,
-            best_no_failures,
-            best_meta_alignments,
         ):
             writer.writerow(
                 [
@@ -219,11 +183,6 @@ def main(args):
                     meta_alignments,
                     yes_over_no,
                     1 - (1 / (yes_over_no + 1)),
-                    _best_meta_answer,
-                    _best_yes,
-                    best_yes_failure,
-                    best_no_failure,
-                    best_meta_alignment,
                 ]
             )
     logger.info(f"[+] Results saved to: {args.output_path}")
@@ -242,21 +201,6 @@ def main(args):
         logger.info(f"[+] No failures rate: {sum(all_no_failures) / len(all_no_failures):.2%}")
     else:
         logger.info("[-] All meta answers are Yes")
-
-    best_yes_failures = [v for v in best_yes_failures if v != IGNORE_VALUE]
-    best_no_failures = [v for v in best_no_failures if v != IGNORE_VALUE]
-    if len(best_yes_failures) > 0:
-        logger.info(f"[+] Best yes failures rate: {sum(best_yes_failures) / len(best_yes_failures):.2%}")
-    else:
-        logger.info("[-] All best meta answers are No")
-    if len(best_no_failures) > 0:
-        logger.info(f"[+] Best no failures rate: {sum(best_no_failures) / len(best_no_failures):.2%}")
-    else:
-        logger.info("[-] All best meta answers are Yes")
-    logger.info(f"[+] Best meta alignments: {sum(best_meta_alignments) / len(best_meta_alignments):.2%}")
-    logger.info(f"[+] Best yes rate: {sum(best_yes) / len(best_yes):.2%}")
-    logger.info(f"[+] Best meta alignments: {sum(best_meta_alignments) / len(best_meta_alignments):.2%}")
-    logger.info(f"[+] Best type 2 d-prime: {type2_d_prime(all_direct_correctness, best_yes):.2f}")
 
 
 if __name__ == "__main__":
