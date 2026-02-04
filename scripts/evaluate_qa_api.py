@@ -23,7 +23,9 @@ parser = argparse.ArgumentParser(description="Evaluate OpenAI API on QA datasets
 parser.add_argument(
     "--model", type=str, default="gpt-5-nano-2025-08-07", choices=OPENAI_PRICING.keys(), help="OpenAI model ID"
 )
-parser.add_argument("--dataset", type=str, default="triviaqa", choices=META_DATASETS.keys(), help="Dataset to evaluate")
+parser.add_argument(
+    "--dataset", type=str, default="trivia_qa", choices=META_DATASETS.keys(), help="Dataset to evaluate"
+)
 parser.add_argument("--start", type=int, help="Start index to evaluate")
 parser.add_argument("--split", type=str, default="validation", help="Split to evaluate")
 parser.add_argument("--num-samples", type=int, help="Number of samples to evaluate (0 for all)")

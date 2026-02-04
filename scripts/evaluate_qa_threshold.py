@@ -17,7 +17,9 @@ torch.set_grad_enabled(False)
 
 parser = argparse.ArgumentParser(description="Evaluate LLM on TriviaQA and save to TSV")
 parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace Model ID")
-parser.add_argument("--dataset", type=str, default="triviaqa", choices=META_DATASETS.keys(), help="Dataset to evaluate")
+parser.add_argument(
+    "--dataset", type=str, default="trivia_qa", choices=META_DATASETS.keys(), help="Dataset to evaluate"
+)
 parser.add_argument("--split", type=str, default="validation", help="Split to evaluate")
 parser.add_argument("--batch-size", type=int, default=128, help="Batch size for inference")
 parser.add_argument("--num-samples", type=int, help="Number of samples to evaluate (0 for all)")

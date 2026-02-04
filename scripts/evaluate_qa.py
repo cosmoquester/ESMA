@@ -31,7 +31,9 @@ from esma.utils import get_logger, seed_everything
 
 parser = argparse.ArgumentParser(description="Evaluate LLM on TriviaQA and save to TSV")
 parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace Model ID")
-parser.add_argument("--dataset", type=str, default="triviaqa", choices=META_DATASETS.keys(), help="Dataset to evaluate")
+parser.add_argument(
+    "--dataset", type=str, default="trivia_qa", choices=META_DATASETS.keys(), help="Dataset to evaluate"
+)
 parser.add_argument("--lang", type=str, default="en", help="Language to evaluate for MKQA")
 parser.add_argument("--split", type=str, default="validation", help="Split to evaluate")
 parser.add_argument("--batch-size", type=int, default=128, help="Batch size for inference")
