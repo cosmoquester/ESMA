@@ -19,6 +19,8 @@ Metacognition, knowing what one knows, is central to intelligence. This project 
 
 ESMA uses a population of weight-perturbed models, a joint reward over direct correctness and meta-alignment, and weighted averaging of parameters. It improves metacognitive sensitivity (e.g. d′<sub>type2</sub> ≈ 1) and generalizes to unseen prompts, languages, and datasets.
 
+Our paper *[Fine-Tuning Language Models to Know What They Know](https://arxiv.org/abs/2602.02605)* is accepted to **NeurIPS 2026**. The full text of the paper can be accessed from OpenReview or ArXiv.
+
 ## Installation
 
 ```bash
