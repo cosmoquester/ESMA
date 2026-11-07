@@ -62,10 +62,9 @@ def main(args: argparse.Namespace) -> None:
             qkv_w = state_dict[qkv_w_key]
             q_dim = model.model.layers[layer_idx].self_attn.q_proj.weight.shape[0]
             k_dim = model.model.layers[layer_idx].self_attn.k_proj.weight.shape[0]
-            v_dim = model.model.layers[layer_idx].self_attn.v_proj.weight.shape[0]
             hf_state_dict[f"{prefix}self_attn.q_proj.weight"] = qkv_w[:q_dim, :]
-            hf_state_dict[f"{prefix}self_attn.k_proj.weight"] = qkv_w[q_dim:q_dim+k_dim, :]
-            hf_state_dict[f"{prefix}self_attn.v_proj.weight"] = qkv_w[q_dim+k_dim:, :]
+            hf_state_dict[f"{prefix}self_attn.k_proj.weight"] = qkv_w[q_dim : q_dim + k_dim, :]
+            hf_state_dict[f"{prefix}self_attn.v_proj.weight"] = qkv_w[q_dim + k_dim :, :]
             del state_dict[qkv_w_key]
 
         qkv_b_key = f"{prefix}self_attn.qkv_proj.bias"
@@ -73,10 +72,9 @@ def main(args: argparse.Namespace) -> None:
             qkv_b = state_dict[qkv_b_key]
             q_dim = model.model.layers[layer_idx].self_attn.q_proj.bias.shape[0]
             k_dim = model.model.layers[layer_idx].self_attn.k_proj.bias.shape[0]
-            v_dim = model.model.layers[layer_idx].self_attn.v_proj.bias.shape[0]
             hf_state_dict[f"{prefix}self_attn.q_proj.bias"] = qkv_b[:q_dim]
-            hf_state_dict[f"{prefix}self_attn.k_proj.bias"] = qkv_b[q_dim:q_dim+k_dim]
-            hf_state_dict[f"{prefix}self_attn.v_proj.bias"] = qkv_b[q_dim+k_dim:]
+            hf_state_dict[f"{prefix}self_attn.k_proj.bias"] = qkv_b[q_dim : q_dim + k_dim]
+            hf_state_dict[f"{prefix}self_attn.v_proj.bias"] = qkv_b[q_dim + k_dim :]
             del state_dict[qkv_b_key]
 
         # Split gate_up_proj -> gate_proj, up_proj

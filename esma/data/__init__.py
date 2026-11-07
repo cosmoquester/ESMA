@@ -14,7 +14,6 @@ META_DATASETS = {
     "web_questions": load_web_questions_meta,
     "mkqa": load_mkqa_meta,
     "arc_challenge": load_arc_challenge_meta,
-    "gsm8k": load_gsm8k_meta,
 }
 
 __all__ = [

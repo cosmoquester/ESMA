@@ -412,7 +412,7 @@ def main(args):
                 # 1) Direct answer and correctness (shared across the group)
                 correctness = run_batch_inference(unwrapped_model, tokenizer, mb, args.max_new_tokens)
 
-                B = len(correctness)
+                # B = Batch Size
                 meta_prompt_ids = mb["meta_input_ids"]
                 meta_prompt_mask = mb["meta_attention_mask"]
 
