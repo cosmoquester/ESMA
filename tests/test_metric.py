@@ -2,6 +2,8 @@
 
 from esma.metric import (
     IGNORE_VALUE,
+    correctness_arc,
+    correctness_by_exact_match,
     correctness_by_inclusion,
     meta_alignment,
     meta_metrics,
@@ -48,6 +50,60 @@ class TestCorrectnessByInclusion:
         outputs = ["Paris", "London", "Berlin"]
         answer_lists = [["Paris"], ["London"], ["Tokyo"]]
         assert correctness_by_inclusion(outputs, answer_lists) == [1, 1, 0]
+
+
+class TestCorrectnessByExactMatch:
+    """Tests for correctness_by_exact_match.
+
+    Normalization follows the TriviaQA convention, and a gold answer buried in extra
+    words is not counted correct.
+    """
+
+    def test_normalized_exact_match(self):
+        assert correctness_by_exact_match(["Paris."], [["paris"]]) == [1]
+        assert correctness_by_exact_match(["The Paris"], [["Paris"]]) == [1]
+        assert correctness_by_exact_match(["Well-Known"], [["well known"]]) == [1]
+
+    def test_rejects_answer_buried_in_extra_words(self):
+        outputs = ["The capital of France is Paris."]
+        answer_lists = [["Paris"]]
+        assert correctness_by_inclusion(outputs, answer_lists) == [1]
+        assert correctness_by_exact_match(outputs, answer_lists) == [0]
+
+    def test_any_alias_matches(self):
+        assert correctness_by_exact_match(["France"], [["Paris", "France"]]) == [1]
+
+    def test_multiple_samples(self):
+        outputs = ["Paris", "London is the capital", "berlin"]
+        answer_lists = [["Paris"], ["London"], ["Tokyo"]]
+        assert correctness_by_exact_match(outputs, answer_lists) == [1, 0, 0]
+
+
+_ARC_QUESTION = "What is the capital of France?\nA. London\nB. Paris\nC. Berlin"
+
+
+class TestCorrectnessArc:
+    """Tests for correctness_arc."""
+
+    def test_choice_text_counts(self):
+        assert correctness_arc(["The answer is Paris."], [_ARC_QUESTION], [["Paris"]]) == [1]
+
+    def test_option_letter_counts(self):
+        assert correctness_arc(["B"], [_ARC_QUESTION], [["Paris"]]) == [1]
+        assert correctness_arc(["The answer is B."], [_ARC_QUESTION], [["Paris"]]) == [1]
+
+    def test_wrong_letter_and_wrong_text(self):
+        assert correctness_arc(["A"], [_ARC_QUESTION], [["Paris"]]) == [0]
+        assert correctness_arc(["London"], [_ARC_QUESTION], [["Paris"]]) == [0]
+
+    def test_letter_inside_a_word_does_not_count(self):
+        assert correctness_arc(["BECAUSE"], [_ARC_QUESTION], [["Paris"]]) == [0]
+
+    def test_multiple_samples(self):
+        outputs = ["B", "A", "Paris"]
+        questions = [_ARC_QUESTION, _ARC_QUESTION, _ARC_QUESTION]
+        answers = [["Paris"], ["Paris"], ["Paris"]]
+        assert correctness_arc(outputs, questions, answers) == [1, 0, 1]
 
 
 class TestMetaYes:
@@ -227,3 +283,14 @@ class TestMetaMetrics:
         _, _, yes_f, no_f, _ = meta_metrics(direct, meta, answers, keep_length=True)
         assert len(yes_f) == 2
         assert len(no_f) == 2
+
+    def test_precomputed_correctness_overrides_inclusion(self):
+        direct = ["London"]
+        meta = ["yes"]
+        answers = [["Paris"]]
+        direct_correctness, yes, _, _, alignments = meta_metrics(
+            direct, meta, answers, direct_correctness=[1]
+        )
+        assert direct_correctness == [1]
+        assert yes == [1]
+        assert alignments == [1]

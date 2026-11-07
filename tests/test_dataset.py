@@ -14,7 +14,7 @@ def _make_fake_dataset(n: int = 3) -> list[dict[str, Any]]:
 
 
 class _FakeTokenizer:
-    """Minimal tokenizer-like object for ESDataset (no chat_template)."""
+    """Minimal tokenizer-like object for MetaDataset (no chat_template)."""
 
     chat_template = None
     pad_token_id = 0
@@ -46,8 +46,8 @@ class _FakeTokenizerWithChat(_FakeTokenizer):
         return " ".join(parts) if len(parts) == 1 else parts
 
 
-class TestESDataset:
-    """Tests for ESDataset."""
+class TestMetaDataset:
+    """Tests for MetaDataset."""
 
     def test_len(self):
         data = _make_fake_dataset(5)
@@ -105,8 +105,9 @@ class TestESDataset:
         ds = MetaDataset(data, tok, max_length=64, meta_prompt=META_QA_PROMPT)
         batch = [ds[0], ds[1]]
         batched = MetaDataset.simple_collate_fn(batch)
-        assert "meta_input_ids" in batched
-        assert "meta_attention_mask" in batched
+        assert batched["meta_input_ids"].dim() == 2
+        assert batched["meta_attention_mask"].dim() == 2
+        assert batched["meta_input_ids"].size(0) == 2
 
     def test_pad_collate_fn_no_meta(self):
         data = _make_fake_dataset(2)

@@ -7,10 +7,12 @@ import numpy as np
 import torch
 
 from esma.utils import (
+    format_metrics,
     get_logger,
+    handle_punc,
     normalize_answer,
     remove_articles,
-    remove_punc,
+    replace_underscore,
     seed_everything,
     white_space_fix,
 )
@@ -85,22 +87,54 @@ class TestWhiteSpaceFix:
         assert white_space_fix("a  b   c") == "a b c"
 
 
-class TestRemovePunc:
-    """Tests for remove_punc."""
+class TestReplaceUnderscore:
+    """Tests for replace_underscore."""
 
-    def test_removes_punctuation(self):
-        assert remove_punc("hello!") == "hello"
-        assert remove_punc("what?") == "what"
+    def test_replaces_underscores_with_spaces(self):
+        assert replace_underscore("well_known") == "well known"
+
+    def test_leaves_text_without_underscores(self):
+        assert replace_underscore("paris") == "paris"
+
+
+class TestHandlePunc:
+    """Tests for handle_punc.
+
+    Punctuation is replaced by a space, matching the official TriviaQA scorer,
+    so hyphenated words stay as separate tokens.
+    """
+
+    def test_replaces_punctuation_with_space(self):
+        assert handle_punc("hello!") == "hello "
+        assert handle_punc("what?") == "what "
 
     def test_keeps_letters_and_numbers(self):
-        assert remove_punc("a1b2") == "a1b2"
+        assert handle_punc("a1b2") == "a1b2"
 
-    def test_removes_all_punctuation(self):
-        assert remove_punc("h.e,l!l?o") == "hello"
+    def test_splits_on_internal_punctuation(self):
+        assert handle_punc("h.e,l!l?o") == "h e l l o"
+        assert handle_punc("well-known") == "well known"
+
+    def test_replaces_curly_quotes_and_acute_accent(self):
+        assert handle_punc("‘Paris’") == " Paris "
+        assert handle_punc("´") == " "
+
+
+class TestFormatMetrics:
+    """Tests for format_metrics."""
+
+    def test_formats_with_default_precision(self):
+        assert format_metrics({"acc": 0.5, "loss": 1.0}) == "acc: 0.5000, loss: 1.0000"
+
+    def test_respects_decimal_places(self):
+        assert format_metrics({"acc": 1 / 3}, decimal_places=2) == "acc: 0.33"
+
+    def test_empty_dict(self):
+        assert format_metrics({}) == ""
 
 
 class TestNormalizeAnswer:
-    """Tests for normalize_answer."""
+    """Tests for normalize_answer (official TriviaQA exact-match convention)."""
 
     def test_lowercases(self):
         assert normalize_answer("Paris") == "paris"
@@ -116,3 +150,10 @@ class TestNormalizeAnswer:
 
     def test_only_punctuation_and_articles(self):
         assert normalize_answer("a the . , !") == ""
+
+    def test_hyphen_and_underscore_become_spaces(self):
+        assert normalize_answer("Well-Known") == "well known"
+        assert normalize_answer("foo_bar") == "foo bar"
+
+    def test_curly_quotes_are_dropped(self):
+        assert normalize_answer("‘The Paris’") == "paris"
