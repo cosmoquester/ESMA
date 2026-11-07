@@ -4,7 +4,9 @@ from datasets import Dataset, load_dataset
 
 
 def load_trivia_qa(split: str = "validation", num_samples: int | None = None) -> Dataset:
-    """Load TriviaQA dataset.
+    """Load TriviaQA dataset from HuggingFace.
+
+    https://huggingface.co/datasets/mandarjoshi/trivia_qa
 
     Args:
         split: Split to load (validation, test, train)
@@ -25,7 +27,7 @@ def load_trivia_qa(split: str = "validation", num_samples: int | None = None) ->
                     - type: Type of the answer
     """
     dataset = load_dataset(
-        "trivia_qa",
+        "mandarjoshi/trivia_qa",
         "rc",
         split=split,
         revision="0f7faf33a3908546c6fd5b73a660e0f8ff173c2f",
