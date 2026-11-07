@@ -4,7 +4,7 @@ from typing import Any
 
 import torch
 
-from esma.dataset import ESDataset, SFTDataset, SFTMetaDataset
+from esma.dataset import MetaDataset, SFTDataset, SFTMetaDataset
 from esma.prompt import META_QA_PROMPT
 
 
@@ -52,13 +52,13 @@ class TestESDataset:
     def test_len(self):
         data = _make_fake_dataset(5)
         tok = _FakeTokenizer()
-        ds = ESDataset(data, tok, max_length=64)
+        ds = MetaDataset(data, tok, max_length=64)
         assert len(ds) == 5
 
     def test_getitem_keys_without_meta(self):
         data = _make_fake_dataset(1)
         tok = _FakeTokenizer()
-        ds = ESDataset(data, tok, max_length=64, meta_prompt=None)
+        ds = MetaDataset(data, tok, max_length=64, meta_prompt=None)
         out = ds[0]
         assert "question_id" in out
         assert "question" in out
@@ -71,7 +71,7 @@ class TestESDataset:
     def test_getitem_keys_with_meta(self):
         data = _make_fake_dataset(1)
         tok = _FakeTokenizer()
-        ds = ESDataset(data, tok, max_length=64, meta_prompt=META_QA_PROMPT)
+        ds = MetaDataset(data, tok, max_length=64, meta_prompt=META_QA_PROMPT)
         out = ds[0]
         assert "meta_input_ids" in out
         assert "meta_attention_mask" in out
@@ -82,7 +82,7 @@ class TestESDataset:
     def test_getitem_tensor_shapes(self):
         data = _make_fake_dataset(1)
         tok = _FakeTokenizer()
-        ds = ESDataset(data, tok, max_length=64)
+        ds = MetaDataset(data, tok, max_length=64)
         out = ds[0]
         assert out["input_ids"].dim() == 1
         assert out["attention_mask"].dim() == 1
@@ -91,9 +91,9 @@ class TestESDataset:
     def test_simple_collate_fn_no_meta(self):
         data = _make_fake_dataset(2)
         tok = _FakeTokenizer()
-        ds = ESDataset(data, tok, max_length=64, meta_prompt=None)
+        ds = MetaDataset(data, tok, max_length=64, meta_prompt=None)
         batch = [ds[0], ds[1]]
-        batched = ESDataset.simple_collate_fn(batch)
+        batched = MetaDataset.simple_collate_fn(batch)
         assert len(batched["question_id"]) == 2
         assert len(batched["input_ids"]) == 2
         assert len(batched["question"]) == 2
@@ -102,18 +102,18 @@ class TestESDataset:
     def test_simple_collate_fn_with_meta(self):
         data = _make_fake_dataset(2)
         tok = _FakeTokenizer()
-        ds = ESDataset(data, tok, max_length=64, meta_prompt=META_QA_PROMPT)
+        ds = MetaDataset(data, tok, max_length=64, meta_prompt=META_QA_PROMPT)
         batch = [ds[0], ds[1]]
-        batched = ESDataset.simple_collate_fn(batch)
+        batched = MetaDataset.simple_collate_fn(batch)
         assert "meta_input_ids" in batched
         assert "meta_attention_mask" in batched
 
     def test_pad_collate_fn_no_meta(self):
         data = _make_fake_dataset(2)
         tok = _FakeTokenizer()
-        ds = ESDataset(data, tok, max_length=64, meta_prompt=None)
+        ds = MetaDataset(data, tok, max_length=64, meta_prompt=None)
         batch = [ds[0], ds[1]]
-        batched = ESDataset.pad_collate_fn(batch)
+        batched = MetaDataset.pad_collate_fn(batch)
         assert batched["input_ids"].dim() == 2
         assert batched["attention_mask"].dim() == 2
         assert batched["input_ids"].size(0) == 2
@@ -122,9 +122,9 @@ class TestESDataset:
     def test_pad_collate_fn_with_meta(self):
         data = _make_fake_dataset(2)
         tok = _FakeTokenizer()
-        ds = ESDataset(data, tok, max_length=64, meta_prompt=META_QA_PROMPT)
+        ds = MetaDataset(data, tok, max_length=64, meta_prompt=META_QA_PROMPT)
         batch = [ds[0], ds[1]]
-        batched = ESDataset.pad_collate_fn(batch)
+        batched = MetaDataset.pad_collate_fn(batch)
         assert batched["meta_input_ids"].dim() == 2
         assert batched["meta_attention_mask"].dim() == 2
         assert batched["meta_input_ids"].size(0) == 2

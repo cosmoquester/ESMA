@@ -7,7 +7,7 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from esma.data import META_DATASETS, load_fictional_qa_meta, load_trivia_qa_meta
-from esma.dataset import ESDataset
+from esma.dataset import MetaDataset
 from esma.metric import IGNORE_VALUE, meta_metrics
 from esma.prompt import DIRECT_QA_WITH_IDW_PROMPT
 from esma.utils import get_logger, seed_everything
@@ -52,13 +52,13 @@ def main(args):
         prompt = DIRECT_QA_WITH_IDW_PROMPT
     else:
         raise ValueError(f"Invalid dataset: {args.dataset}")
-    dataset = ESDataset(data, tokenizer, max_length=args.max_input_length, prompt=prompt)
+    dataset = MetaDataset(data, tokenizer, max_length=args.max_input_length, prompt=prompt)
     data_loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-        collate_fn=ESDataset.pad_collate_fn,
+        collate_fn=MetaDataset.pad_collate_fn,
     )
     logger.info(f"[+] Total samples to evaluate: {len(data)}")
 

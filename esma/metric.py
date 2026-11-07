@@ -1,5 +1,9 @@
+import re
+
 import numpy as np
 from scipy.stats import norm
+
+from .utils import normalize_answer
 
 IGNORE_VALUE = -100
 
@@ -11,6 +15,55 @@ def correctness_by_inclusion(outputs: list[str], answer_lists: list[list[str]]) 
             correctness.append(1)
         else:
             correctness.append(0)
+    return correctness
+
+
+def correctness_by_exact_match(outputs: list[str], answer_lists: list[list[str]]) -> list[int]:
+    """Grade open-ended QA (e.g. TriviaQA) by normalized exact match.
+
+    The model's output is counted correct only if, after normalization, it equals one
+    of the gold answers exactly. Unlike ``correctness_by_inclusion`` this rejects a
+    correct answer buried inside extra words, so it requires the model to emit just the
+    answer (see ``DIRECT_QA_EXACT_PROMPT``).
+    """
+    correctness = []
+    for output, answers in zip(outputs, answer_lists):
+        pred = normalize_answer(output)
+        golds = {normalize_answer(answer) for answer in answers}
+        correctness.append(1 if pred in golds else 0)
+    return correctness
+
+
+def correctness_arc(outputs: list[str], questions: list[str], answer_lists: list[list[str]]) -> list[int]:
+    """Grade ARC-Challenge by either the chosen option letter or the choice text.
+
+    Instruct models often answer a multiple-choice question with just the option
+    letter ("B"), which substring inclusion of the choice text would miss. The
+    labeled options are parsed back out of the question, the correct label is
+    resolved from the gold choice text, and the output is counted correct if it
+    either mentions the correct choice text or selects the correct letter.
+    """
+    correctness = []
+    for output, question, answers in zip(outputs, questions, answer_lists):
+        options = {}  # label -> text
+        for line in question.splitlines():
+            match = re.match(r"\s*([A-Za-z0-9])[.)]\s+(.*)", line)
+            if match:
+                options[match.group(1).upper()] = match.group(2).strip()
+
+        gold_texts = {a.strip() for a in answers}
+        correct_labels = {label for label, text in options.items() if text in gold_texts}
+
+        text_hit = any(a.lower() in output.lower() for a in answers)
+
+        letter_hit = False
+        if options:
+            label_pattern = "".join(re.escape(label) for label in options)
+            letter_match = re.search(rf"(?<![A-Za-z0-9])([{label_pattern}])(?![A-Za-z0-9])", output.upper())
+            if letter_match is not None:
+                letter_hit = letter_match.group(1) in correct_labels
+
+        correctness.append(1 if (text_hit or letter_hit) else 0)
     return correctness
 
 
@@ -96,8 +149,10 @@ def meta_metrics(
     answer_lists: list[list[str]],
     keep_length: bool = False,
     lang: str = "en",
+    direct_correctness: list[int] | None = None,
 ) -> tuple[list[int], list[int], list[int], list[int], list[int]]:
-    direct_correctness = correctness_by_inclusion(direct_outputs, answer_lists)
+    if direct_correctness is None:
+        direct_correctness = correctness_by_inclusion(direct_outputs, answer_lists)
     if lang == "ko":
         yes = meta_yes_ko(meta_outputs)
     elif lang.startswith("zh"):

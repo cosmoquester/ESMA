@@ -8,7 +8,7 @@ from transformers import PreTrainedTokenizer
 from .prompt import DIRECT_QA_PROMPT, META_QA_PROMPT
 
 
-class ESDataset(Dataset):
+class MetaDataset(Dataset):
     def __init__(
         self,
         dataset: Dataset,
@@ -66,11 +66,17 @@ class ESDataset(Dataset):
             "answers": item["answers"],
         }
         if self.meta_prompt is not None:
+            if self.tokenizer.chat_template is not None:
+                meta_examples = [
+                    {"role": "user", "content": self.meta_prompt.format(question=item["question"])},
+                ]
+                meta_examples = self.tokenizer.apply_chat_template(
+                    meta_examples, tokenize=False, add_generation_prompt=True, enable_thinking=False
+                )
+            else:
+                meta_examples = [self.meta_prompt.format(question=item["question"])]
             meta_tokens = self.tokenizer(
-                self.meta_prompt.format(question=item["question"]),
-                return_tensors="pt",
-                truncation=True,
-                max_length=self.max_length,
+                meta_examples, return_tensors="pt", truncation=True, max_length=self.max_length
             )
             example["meta_input_ids"] = meta_tokens["input_ids"].squeeze(0)
             example["meta_attention_mask"] = meta_tokens["attention_mask"].squeeze(0)

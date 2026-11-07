@@ -8,6 +8,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from esma.data import (
     META_DATASETS,
+    load_arc_challenge_meta,
     load_fictional_qa_meta,
     load_freebase_qa_meta,
     load_mkqa_meta,
@@ -15,8 +16,8 @@ from esma.data import (
     load_trivia_qa_meta,
     load_web_questions_meta,
 )
-from esma.dataset import ESDataset
-from esma.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
+from esma.dataset import MetaDataset
+from esma.metric import IGNORE_VALUE, correctness_arc, meta_metrics, type2_d_prime
 from esma.prompt import (
     DIRECT_QA_CN_PROMPT,
     DIRECT_QA_ES_PROMPT,
@@ -85,6 +86,11 @@ def main(args):
         data = load_freebase_qa_meta(split=args.split, num_samples=args.num_samples)
         prompt = DIRECT_QA_PROMPT
         meta_prompt = META_QA_PROMPT
+    elif args.dataset == "arc_challenge":
+        logger.info("[+] Loading ARC-Challenge dataset...")
+        data = load_arc_challenge_meta(split=args.split, num_samples=args.num_samples)
+        prompt = DIRECT_QA_PROMPT
+        meta_prompt = META_QA_PROMPT
     elif args.dataset == "mkqa":
         logger.info("[+] Loading MKQA dataset...")
         data = load_mkqa_meta(split=args.split, num_samples=args.num_samples, lang=args.lang)
@@ -102,13 +108,13 @@ def main(args):
             meta_prompt = META_QA_PROMPT
     else:
         raise ValueError(f"Invalid dataset: {args.dataset}")
-    dataset = ESDataset(data, tokenizer, max_length=args.max_input_length, prompt=prompt, meta_prompt=meta_prompt)
+    dataset = MetaDataset(data, tokenizer, max_length=args.max_input_length, prompt=prompt, meta_prompt=meta_prompt)
     data_loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-        collate_fn=ESDataset.pad_collate_fn,
+        collate_fn=MetaDataset.pad_collate_fn,
     )
     logger.info(f"[+] Total samples to evaluate: {len(data)}")
 
@@ -116,6 +122,10 @@ def main(args):
         base_model = args.model.strip("/").split("/")[-1]
         os.makedirs("eval_outputs", exist_ok=True)
         args.output_path = f"eval_outputs/{args.dataset}_{base_model}_{args.split}_{args.num_samples}.tsv"
+        if args.dataset == "mkqa":
+            args.output_path = (
+                f"eval_outputs/{args.dataset}_{args.lang}_{base_model}_{args.split}_{args.num_samples}.tsv"
+            )
 
     all_question_ids = []
     all_questions = []
@@ -149,8 +159,18 @@ def main(args):
         meta_generated_tokens = meta_outputs[:, meta_input_ids.shape[1] :]
         meta_decoded_outputs = tokenizer.batch_decode(meta_generated_tokens, skip_special_tokens=True)
 
+        if args.dataset == "arc_challenge":
+            precomputed_correctness = correctness_arc(decoded_outputs, batch["question"], batch["answers"])
+        else:
+            precomputed_correctness = None
+
         direct_correctness, yes, yes_failures, no_failures, meta_alignments = meta_metrics(
-            decoded_outputs, meta_decoded_outputs, batch["answers"], keep_length=True, lang=args.lang
+            decoded_outputs,
+            meta_decoded_outputs,
+            batch["answers"],
+            keep_length=True,
+            lang=args.lang,
+            direct_correctness=precomputed_correctness,
         )
 
         all_question_ids.extend(batch["question_id"])
