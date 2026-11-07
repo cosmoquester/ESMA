@@ -8,3 +8,5 @@ wandb
 accelerate>=1.2.0,<2.0.0
 scipy
 scikit-learn
+# vllm
+# ray
