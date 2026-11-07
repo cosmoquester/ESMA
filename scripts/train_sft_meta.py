@@ -31,7 +31,7 @@ parser = argparse.ArgumentParser(description="SFT Training for Language Models")
 parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace Model ID")
 
 g = parser.add_argument_group("Data")
-g.add_argument("--dataset", type=str, default="fictional_qa", choices=["trivia_qa", "fictional_qa"])
+g.add_argument("--dataset", type=str, default="trivia_qa", choices=["trivia_qa"])
 g.add_argument("--max-length", type=int, default=256, help="Maximum sequence length")
 g.add_argument("--num-samples", type=int, help="Number of training samples to load")
 g.add_argument("--num-val-samples", type=int, help="Number of validation samples to load")

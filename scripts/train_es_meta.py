@@ -12,12 +12,12 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from esma.data import load_trivia_qa_meta
-from esma.dataset import ESDataset
+from esma.dataset import MetaDataset
 from esma.evolution import apply_evolution
 from esma.metric import IGNORE_VALUE, meta_metrics, type2_d_prime
 from esma.prompt import META_QA_PROMPT
 from esma.reward import REWARD_TYPE_TO_FUNCTION
-from esma.utils import get_logger, seed_everything
+from esma.utils import format_metrics, get_logger, seed_everything
 
 torch.set_grad_enabled(False)
 
@@ -37,7 +37,7 @@ g.add_argument("--alpha", type=float, default=5e-4, help="Alpha")
 g.add_argument("--num-iterations", type=int, default=300, help="Number of iterations")
 g.add_argument("--population-size", type=int, default=32, help="Population size")
 g.add_argument("--num-data-per-iteration", "-n", type=int, default=256, help="Number of data per iteration")
-g.add_argument("--reward-type", type=str, default="multilevel", choices=REWARD_TYPE_TO_FUNCTION.keys(), help="Reward type")  # noqa: E501
+g.add_argument("--reward-type", type=str, default="esma", choices=REWARD_TYPE_TO_FUNCTION.keys(), help="Reward type")  # noqa: E501
 
 g = parser.add_argument_group("Experiment Settings")
 g.add_argument("--batch-size", type=int, default=256, help="Batch size")
@@ -229,13 +229,13 @@ def main(args):
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     logger.info(f"[+] Tokenized dataset: {len(train_data)}")
 
-    train_dataset = ESDataset(
+    train_dataset = MetaDataset(
         train_data,
         tokenizer,
         max_length=args.max_input_length,
         meta_prompt=META_QA_PROMPT,
     )
-    val_dataset = ESDataset(
+    val_dataset = MetaDataset(
         val_data,
         tokenizer,
         max_length=args.max_input_length,
@@ -247,7 +247,7 @@ def main(args):
         shuffle=True,
         num_workers=args.num_workers,
         pin_memory=True,
-        collate_fn=ESDataset.simple_collate_fn,
+        collate_fn=MetaDataset.simple_collate_fn,
     )
     val_loader = DataLoader(
         val_dataset,
@@ -255,7 +255,7 @@ def main(args):
         shuffle=False,
         num_workers=args.num_workers,
         pin_memory=True,
-        collate_fn=ESDataset.pad_collate_fn,
+        collate_fn=MetaDataset.pad_collate_fn,
     )
     infinite_loader = itertools.chain.from_iterable(itertools.repeat(train_loader))
     val_loader = accelerator.prepare(val_loader)
@@ -295,8 +295,7 @@ def main(args):
         if accelerator.is_main_process:
             avg_reward = all_rewards.mean().item()
             all_metrics["train/rewards"] = avg_reward
-            metric_str = ", ".join([f"{k}: {v:.4f}" for k, v in all_metrics.items()])
-            logger.info(f"[+] Iteration {iteration:03d} {metric_str}")
+            logger.info(f"[+] Iteration {iteration:03d} {format_metrics(all_metrics)}")
             if run is not None:
                 run.log(all_metrics, step=iteration)
 
@@ -318,13 +317,12 @@ def main(args):
             metrics = evaluate_model(model, tokenizer, val_loader, args.max_new_tokens, args.reward_type)
             all_val_metrics = {"val/" + k: accelerator.gather(v) for k, v in sorted(metrics.items())}
             all_val_metrics = {k: v[v != IGNORE_VALUE].mean().item() for k, v in all_val_metrics.items()}
-            metric_str = ", ".join([f"{k}: {v:.4f}" for k, v in all_val_metrics.items()])
-            logger.info(f"[+] Validation Iteration {iteration:03d} {metric_str}")
+            logger.info(f"[+] Validation Iteration {iteration:03d} {format_metrics(all_val_metrics)}")
             if run is not None and accelerator.is_main_process:
                 run.log(all_val_metrics, step=iteration)
 
     test_data = load_trivia_qa_meta(split="test", num_samples=100)
-    test_dataset = ESDataset(
+    test_dataset = MetaDataset(
         test_data,
         tokenizer,
         max_length=args.max_input_length,
@@ -336,14 +334,13 @@ def main(args):
         shuffle=False,
         num_workers=args.num_workers,
         pin_memory=True,
-        collate_fn=ESDataset.pad_collate_fn,
+        collate_fn=MetaDataset.pad_collate_fn,
     )
     test_loader = accelerator.prepare(test_loader)
     test_metrics = evaluate_model(model, tokenizer, test_loader, args.max_new_tokens, args.reward_type)
     all_test_metrics = {"test/" + k: accelerator.gather(v) for k, v in sorted(test_metrics.items())}
     all_test_metrics = {k: v[v != IGNORE_VALUE].mean().item() for k, v in all_test_metrics.items()}
-    metric_str = ", ".join([f"{k}: {v:.4f}" for k, v in all_test_metrics.items()])
-    logger.info(f"[+] Test {metric_str}")
+    logger.info(f"[+] Test {format_metrics(all_test_metrics)}")
     if run is not None and accelerator.is_main_process:
         run.log(all_test_metrics, step=args.num_iterations)
 
