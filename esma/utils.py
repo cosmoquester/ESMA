@@ -20,6 +20,11 @@ def seed_everything(seed: int = 42):
     torch.cuda.manual_seed_all(seed)
 
 
+def format_metrics(metrics: dict[str, float], decimal_places: int = 4) -> str:
+    """Format a dict of metric name -> value as a single comma-separated string."""
+    return ", ".join([f"{k}: {v:.{decimal_places}f}" for k, v in metrics.items()])
+
+
 def get_logger(name: str) -> logging.Logger:
     """Return logger for logging
 
@@ -44,10 +49,19 @@ def white_space_fix(text: str) -> str:
     return " ".join(text.split())
 
 
-def remove_punc(text: str) -> str:
-    exclude = set(string.punctuation)
-    return "".join(ch for ch in text if ch not in exclude)
+def replace_underscore(text: str) -> str:
+    return text.replace("_", " ")
+
+
+# Official TriviaQA also excludes curly quotes and the acute accent, and replaces each
+# punctuation character with a space rather than deleting it (so "well-known" -> "well known").
+_PUNC_EXCLUDE = set(string.punctuation + "‘’´`")
+
+
+def handle_punc(text: str) -> str:
+    return "".join(ch if ch not in _PUNC_EXCLUDE else " " for ch in text)
 
 
 def normalize_answer(s: str) -> str:
-    return white_space_fix(remove_articles(remove_punc(s.lower())))
+    """Normalize an answer using the official TriviaQA exact-match convention."""
+    return white_space_fix(remove_articles(handle_punc(replace_underscore(s.lower())))).strip()
